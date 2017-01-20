@@ -96,7 +96,7 @@ func templatesDocsPdSwaggerJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/docs/pd.swagger.json", size: 28414, mode: os.FileMode(436), modTime: time.Unix(1482323941, 0)}
+	info := bindataFileInfo{name: "templates/docs/pd.swagger.json", size: 28414, mode: os.FileMode(436), modTime: time.Unix(1482734178, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }

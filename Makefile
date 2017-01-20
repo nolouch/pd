@@ -11,7 +11,7 @@ LDFLAGS += -X "github.com/pingcap/pd/server.PDGitHash=$(shell git rev-parse HEAD
 # Ignore following files's coverage.
 #
 # See more: https://godoc.org/path/filepath#Match
-COVERIGNORE := "cmd/pd-server/main.go,server/api/bindata_assetfs.go"
+COVERIGNORE := "cmd/pd-server/main.go,server/api/v1http/bindata_assetfs.go"
 
 default: build
 
@@ -22,7 +22,7 @@ dev: build check test
 build-fe:
 	go get github.com/jteeuwen/go-bindata/...
 	go get github.com/elazarl/go-bindata-assetfs/...
-	cd server/api && go-bindata-assetfs -pkg api templates/... && cd -
+	cd server/api/v1http && go-bindata-assetfs -pkg v1http templates/... && cd -
 
 build:
 	rm -rf vendor && ln -s _vendor/vendor vendor
