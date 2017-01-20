@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/coreos/etcd/pkg/netutil"
 	"github.com/coreos/etcd/pkg/transport"
 	"github.com/coreos/etcd/pkg/types"
@@ -57,6 +59,8 @@ type ServerConfig struct {
 
 	// ClientCertAuthEnabled is true when cert has been signed by the client CA.
 	ClientCertAuthEnabled bool
+
+	GrpcClosure func(*grpc.Server)
 }
 
 // VerifyBootstrap sanity-checks the initial config for bootstrap case

@@ -45,5 +45,9 @@ func Server(s *etcdserver.EtcdServer, tls *tls.Config) *grpc.Server {
 	pb.RegisterAuthServer(grpcServer, NewAuthServer(s))
 	pb.RegisterMaintenanceServer(grpcServer, NewMaintenanceServer(s))
 
+	if s.Cfg.GrpcClosure != nil {
+		s.Cfg.GrpcClosure(grpcServer)
+	}
+
 	return grpcServer
 }
