@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/BurntSushi/toml"
 	"github.com/coreos/etcd/embed"
 	"github.com/juju/errors"
@@ -78,6 +80,8 @@ type Config struct {
 	electionMs uint64
 
 	configFile string
+
+	GrpcClosure func(*grpc.Server)
 }
 
 // NewConfig creates a new config.

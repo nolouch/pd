@@ -147,7 +147,7 @@ func (s *Server) updateTimestamp() error {
 
 const maxRetryCount = 100
 
-func (s *Server) getRespTS(count uint32) (pdpb.Timestamp, error) {
+func (s *Server) GetRespTS(count uint32) (pdpb.Timestamp, error) {
 	resp := pdpb.Timestamp{}
 	for i := 0; i < maxRetryCount; i++ {
 		current, ok := s.ts.Load().(*atomicObject)

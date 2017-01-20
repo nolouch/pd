@@ -128,6 +128,7 @@ func (s *Server) StartEtcd(apiHandler http.Handler) error {
 	if apiHandler != nil {
 		etcdCfg.UserHandlers[pdAPIPrefix] = apiHandler
 	}
+	etcdCfg.GrpcClosure = s.cfg.GrpcClosure
 
 	log.Info("start embed etcd")
 

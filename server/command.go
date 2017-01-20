@@ -28,7 +28,7 @@ func (c *conn) handleTso(req *pdpb.Request) (*pdpb.Response, error) {
 	}
 
 	count := request.GetCount()
-	ts, err := c.s.getRespTS(count)
+	ts, err := c.s.GetRespTS(count)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
