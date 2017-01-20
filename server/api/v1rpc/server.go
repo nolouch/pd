@@ -11,9 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO: move conn.go to this package.
+
 package v1rpc
 
-struct RpcServer {
+import "github.com/pingcap/pd/server"
 
+// RPCServer provide v1rpc services.
+type RPCServer struct {
+	*server.Server
 }
 
+// NewRPCServer create a new RPCServer.
+func NewRPCServer(svr *server.Server) *RPCServer {
+	return *RPCServer{
+		Server: svr,
+	}
+}
