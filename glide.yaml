@@ -120,7 +120,7 @@ import:
 - package: github.com/pingcap/check
   version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
 - package: github.com/pingcap/kvproto
-  version: 4416a5a5ad6f6c63c27904c85c67c26133059127
+  version: ov/grpc-pdpb
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -129,6 +129,7 @@ import:
   - pkg/metapb
   - pkg/msgpb
   - pkg/pdpb
+  - pkg/pdpb2
   - pkg/raft_cmdpb
   - pkg/raft_serverpb
   - pkg/util
@@ -201,5 +202,5 @@ import:
   repo: https://github.com/spf13/cobra.git
   vcs: git
 - package: github.com/chzyer/readline
-  version: c914be64f07d9998f52bf0d598ec26d457168c0f 
+  version: c914be64f07d9998f52bf0d598ec26d457168c0f
 - package: github.com/elazarl/go-bindata-assetfs

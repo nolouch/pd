@@ -1,5 +1,5 @@
-hash: f5ad1d3c8b2561380c35b4889a43eb9bf340986341d3b4b5cb60dbbd0d66fb64
-updated: 2016-12-21T20:29:22.494162545+08:00
+hash: 8b5f0e0c50eeb6c7e456924785767c942d0fd47df774e7e03d1266f7161a7d5f
+updated: 2017-01-20T17:18:07.240399408+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -130,7 +130,7 @@ imports:
 - name: github.com/pingcap/check
   version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
 - name: github.com/pingcap/kvproto
-  version: 4416a5a5ad6f6c63c27904c85c67c26133059127
+  version: d5cc49df2651d053ff7e3ab5416de51aade724d0
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -139,6 +139,7 @@ imports:
   - pkg/metapb
   - pkg/msgpb
   - pkg/pdpb
+  - pkg/pdpb2
   - pkg/raft_cmdpb
   - pkg/raft_serverpb
   - pkg/util
