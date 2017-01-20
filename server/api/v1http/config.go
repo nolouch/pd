@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package v1http
 
 import (
 	"net/http"
@@ -20,24 +20,34 @@ import (
 	"github.com/unrolled/render"
 )
 
-type clusterHandler struct {
+type confHandler struct {
 	svr *server.Server
 	rd  *render.Render
 }
 
-func newClusterHandler(svr *server.Server, rd *render.Render) *clusterHandler {
-	return &clusterHandler{
+func newConfHandler(svr *server.Server, rd *render.Render) *confHandler {
+	return &confHandler{
 		svr: svr,
 		rd:  rd,
 	}
 }
 
-func (h *clusterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	cluster := h.svr.GetRaftCluster()
-	if cluster == nil {
-		h.rd.JSON(w, http.StatusInternalServerError, errNotBootstrapped.Error())
+func (h *confHandler) Get(w http.ResponseWriter, r *http.Request) {
+	h.rd.JSON(w, http.StatusOK, h.svr.GetConfig())
+}
+
+func (h *confHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
+	h.rd.JSON(w, http.StatusOK, &h.svr.GetConfig().Schedule)
+}
+
+func (h *confHandler) Post(w http.ResponseWriter, r *http.Request) {
+	config := &server.ScheduleConfig{}
+	err := readJSON(r.Body, config)
+	if err != nil {
+		h.rd.JSON(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	h.rd.JSON(w, http.StatusOK, cluster.GetConfig())
+	h.svr.SetScheduleConfig(*config)
+	h.rd.JSON(w, http.StatusOK, nil)
 }

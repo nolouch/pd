@@ -19,7 +19,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/pd/server"
-	"github.com/pingcap/pd/server/api"
+	"github.com/pingcap/pd/server/api/v1http"
 )
 
 var _ = Suite(&testLeaderChangeSuite{})
@@ -44,7 +44,7 @@ func (s *testLeaderChangeSuite) TestLeaderChange(c *C) {
 
 		go func() {
 			svr := server.CreateServer(cfg)
-			err := svr.StartEtcd(api.NewHandler(svr))
+			err := svr.StartEtcd(v1http.NewHandler(svr))
 			c.Assert(err, IsNil)
 			ch <- svr
 		}()

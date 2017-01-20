@@ -11,24 +11,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package v1http
 
 import (
 	"net/http"
 
+	"github.com/pingcap/pd/server"
 	"github.com/unrolled/render"
 )
 
-type homeHandler struct {
-	rd *render.Render
+type clusterHandler struct {
+	svr *server.Server
+	rd  *render.Render
 }
 
-func newHomeHandler(rd *render.Render) *homeHandler {
-	return &homeHandler{
-		rd: rd,
+func newClusterHandler(svr *server.Server, rd *render.Render) *clusterHandler {
+	return &clusterHandler{
+		svr: svr,
+		rd:  rd,
 	}
 }
 
-func (h *homeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h.rd.HTML(w, http.StatusOK, "index", r.Host)
+func (h *clusterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	cluster := h.svr.GetRaftCluster()
+	if cluster == nil {
+		h.rd.JSON(w, http.StatusInternalServerError, errNotBootstrapped.Error())
+		return
+	}
+
+	h.rd.JSON(w, http.StatusOK, cluster.GetConfig())
 }

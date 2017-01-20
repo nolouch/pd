@@ -23,7 +23,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pkg/metricutil"
 	"github.com/pingcap/pd/server"
-	"github.com/pingcap/pd/server/api"
+	"github.com/pingcap/pd/server/api/v1http"
 )
 
 func main() {
@@ -53,7 +53,7 @@ func main() {
 	metricutil.Push(&cfg.Metric)
 
 	svr := server.CreateServer(cfg)
-	err = svr.StartEtcd(api.NewHandler(svr))
+	err = svr.StartEtcd(v1http.NewHandler(svr))
 	if err != nil {
 		log.Fatalf("server start etcd failed - %v", errors.Trace(err))
 	}

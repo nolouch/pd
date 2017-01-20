@@ -11,33 +11,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package v1http
 
 import (
-	"encoding/json"
-	"io"
-	"io/ioutil"
-	"net"
+	"net/http"
 
-	"github.com/juju/errors"
+	"github.com/unrolled/render"
 )
 
-func readJSON(r io.ReadCloser, data interface{}) error {
-	defer r.Close()
-
-	b, err := ioutil.ReadAll(r)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	err = json.Unmarshal(b, data)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
+type homeHandler struct {
+	rd *render.Render
 }
 
-func unixDial(_, addr string) (net.Conn, error) {
-	return net.Dial("unix", addr)
+func newHomeHandler(rd *render.Render) *homeHandler {
+	return &homeHandler{
+		rd: rd,
+	}
+}
+
+func (h *homeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.rd.HTML(w, http.StatusOK, "index", r.Host)
 }

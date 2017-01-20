@@ -15,7 +15,7 @@
 // templates/static/js/jquery-1.11.0.min.js
 // DO NOT EDIT!
 
-package api
+package v1http
 
 import (
 	"github.com/elazarl/go-bindata-assetfs"
