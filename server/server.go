@@ -370,3 +370,7 @@ func (s *Server) txn() clientv3.Txn {
 func (s *Server) leaderTxn(cs ...clientv3.Cmp) clientv3.Txn {
 	return s.txn().If(append(cs, s.leaderCmp())...)
 }
+
+// GetIDAllocator returns a IDAllocator which is the allocator to generate
+// unique ID.
+func (s *Server) GetIDAllocator() IDAllocator { return s.idAlloc }

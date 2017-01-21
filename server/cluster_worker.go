@@ -33,6 +33,11 @@ func (c *RaftCluster) handleRegionHeartbeat(region *regionInfo) (*pdpb.RegionHea
 	return c.coordinator.dispatch(region), nil
 }
 
+// FIXME: export HandleAskSplit later.
+func (c *RaftCluster) HandleAskSplit(request *pdpb.AskSplitRequest) (*pdpb.AskSplitResponse, error) {
+	return c.handleAskSplit(request)
+}
+
 func (c *RaftCluster) handleAskSplit(request *pdpb.AskSplitRequest) (*pdpb.AskSplitResponse, error) {
 	reqRegion := request.GetRegion()
 	startKey := reqRegion.GetStartKey()
@@ -80,6 +85,11 @@ func (c *RaftCluster) checkSplitRegion(left *metapb.Region, right *metapb.Region
 	}
 
 	return errors.New("invalid split region")
+}
+
+// FIXME: export HandleReportSplit later.
+func (c *RaftCluster) HandleReportSplit(request *pdpb.ReportSplitRequest) (*pdpb.ReportSplitResponse, error) {
+	return c.handleReportSplit(request)
 }
 
 func (c *RaftCluster) handleReportSplit(request *pdpb.ReportSplitRequest) (*pdpb.ReportSplitResponse, error) {

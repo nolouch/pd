@@ -263,6 +263,11 @@ func (s *Server) bootstrapCluster(req *pdpb.BootstrapRequest) (*pdpb.Response, e
 	}, nil
 }
 
+// FIXME: export GetRegion later.
+func (c *RaftCluster) GetRegion(regionKey []byte) (*metapb.Region, *metapb.Peer) {
+	return c.getRegion(regionKey)
+}
+
 func (c *RaftCluster) getRegion(regionKey []byte) (*metapb.Region, *metapb.Peer) {
 	region := c.cachedCluster.searchRegion(regionKey)
 	if region == nil {
@@ -302,6 +307,11 @@ func (c *RaftCluster) GetStore(storeID uint64) (*metapb.Store, *StoreStatus, err
 	}
 
 	return store.Store, store.stats, nil
+}
+
+// FIXME: export PutStore later.
+func (c *RaftCluster) PutStore(store *metapb.Store) error {
+	return c.putStore(store)
 }
 
 func (c *RaftCluster) putStore(store *metapb.Store) error {
@@ -499,6 +509,11 @@ func (c *RaftCluster) runBackgroundJobs(interval time.Duration) {
 // GetConfig gets config from cluster.
 func (c *RaftCluster) GetConfig() *metapb.Cluster {
 	return c.cachedCluster.getMeta()
+}
+
+// FIXME: export PutConfig later.
+func (c *RaftCluster) PutConfig(meta *metapb.Cluster) error {
+	return c.putConfig(meta)
 }
 
 func (c *RaftCluster) putConfig(meta *metapb.Cluster) error {
