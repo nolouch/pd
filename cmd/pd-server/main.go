@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/pd/pkg/metricutil"
 	"github.com/pingcap/pd/server"
 	"github.com/pingcap/pd/server/api/v1http"
+	"github.com/pingcap/pd/server/api/v2rpc"
 )
 
 func main() {
@@ -53,6 +54,7 @@ func main() {
 	metricutil.Push(&cfg.Metric)
 
 	svr := server.CreateServer(cfg)
+	cfg.GrpcClosure = v2rpc.NewRPCServer(svr).RegisterTo
 	err = svr.StartEtcd(v1http.NewHandler(svr))
 	if err != nil {
 		log.Fatalf("server start etcd failed - %v", errors.Trace(err))
