@@ -16,6 +16,8 @@
 package v2rpc
 
 import (
+	"io"
+
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/kvproto/pkg/metapb"
@@ -26,6 +28,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 )
+
+// TODO: check each requests header.
 
 // RPCServer provide gRPC services.
 type RPCServer struct {
@@ -187,7 +191,56 @@ func (s *RPCServer) PutStore(ctx context.Context, request *pb.PutStoreRequest) (
 }
 
 func (s *RPCServer) StoreHeartbeat(svr pb.PD_StoreHeartbeatServer) error {
-	return togRPCError(errors.Errorf("not impl"))
+	for {
+		req, err := svr.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		var stats *pdpb.StoreStats
+		resp := &pb.StoreHeartbeatResponse{}
+		cluster, pberr := s.tryGetRaftCluster()
+		if pberr != nil {
+			resp.Header = s.header(pberr)
+			goto RESP
+		}
+
+		if pberr := checkStore(cluster, req.Stats.GetStoreId()); pberr != nil {
+			resp.Header = s.header(pberr)
+			goto RESP
+		}
+
+		stats = &pdpb.StoreStats{
+			StoreId:            req.Stats.StoreId,
+			Capacity:           req.Stats.Capacity,
+			Available:          req.Stats.Available,
+			RegionCount:        req.Stats.RegionCount,
+			SendingSnapCount:   req.Stats.SendingSnapCount,
+			ReceivingSnapCount: req.Stats.ReceivingSnapCount,
+			StartTime:          req.Stats.StartTime,
+			ApplyingSnapCount:  req.Stats.ApplyingSnapCount,
+			IsBusy:             req.Stats.IsBusy,
+		}
+		err = cluster.StoreHeartbeat(stats)
+		if err != nil {
+			pberr := &pb.Error{
+				Type:    pb.ErrorType_UNKNOWN,
+				Message: errors.Trace(err).Error(),
+			}
+			resp.Header = s.header(pberr)
+			goto RESP
+		}
+
+		resp = &pb.StoreHeartbeatResponse{Header: s.header(nil)}
+
+	RESP:
+		if err := svr.Send(resp); err != nil {
+			return err
+		}
+	}
 }
 
 func (s *RPCServer) AskSplit(ctx context.Context, request *pb.AskSplitRequest) (*pb.AskSplitResponse, error) {
@@ -275,7 +328,63 @@ func (s *RPCServer) GetRegionByID(ctx context.Context, request *pb.GetRegionByID
 	}, nil
 }
 
-func (s *RPCServer) RegionHeartbeat(_ pb.PD_RegionHeartbeatServer) error {
+func (s *RPCServer) RegionHeartbeat(svr pb.PD_RegionHeartbeatServer) error {
+	// 	for {
+	// 		req, err := svr.Recv()
+	// 		if err == io.EOF {
+	// 			return nil
+	// 		}
+	// 		if err != nil {
+	// 			return err
+	// 		}
+
+	// 		cluster, pberr := s.tryGetRaftCluster()
+	// 		if pberr != nil {
+	// 			return &pb.PutStoreResponse{
+	// 				Header: s.header(pberr),
+	// 			}, nil
+	// 		}
+
+	// 		if pberr := checkStore(cluster, store.GetId()); pberr != nil {
+	// 			return &pb.PutStoreResponse{
+	// 				Header: s.header(pberr),
+	// 			}, nil
+	// 		}
+
+	// 		region := newRegionInfo(request.GetRegion(), request.GetLeader())
+	// 		region.DownPeers = request.GetDownPeers()
+	// 		region.PendingPeers = request.GetPendingPeers()
+	// 		if region.GetId() == 0 {
+	// 			return nil, errors.Errorf("invalid request region, %v", request)
+	// 		}
+	// 		if region.Leader == nil {
+	// 			return nil, errors.Errorf("invalid request leader, %v", request)
+	// 		}
+
+	// 		err = cluster.cachedCluster.handleRegionHeartbeat(region)
+	// 		if err != nil {
+	// 			return nil, errors.Trace(err)
+	// 		}
+
+	// 		res, err := cluster.handleRegionHeartbeat(region)
+	// 		if err != nil {
+	// 			return nil, errors.Trace(err)
+	// 		}
+
+	// 		if err != nil {
+	// 			return nil, togRPCError(errors.Trace(err))
+	// 		}
+
+	// 		resp := &pb.RegionHeartbeatResponse{
+	// 			Header: s.header(nil),
+	// 	ChangePeer: res.ChangePeer
+	// //
+	// TransferLeader:
+	// 	}
+	// 		if err := svr.Send(resp); err != nil {
+	// 			return err
+	// 		}
+	// 	}
 	return togRPCError(errors.Errorf("not impl"))
 }
 

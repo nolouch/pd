@@ -546,3 +546,7 @@ func (c *RaftCluster) GetScores(store *metapb.Store, status *StoreStatus) []int 
 func (c *RaftCluster) FetchEvents(key uint64, all bool) []LogEvent {
 	return c.coordinator.fetchEvents(key, all)
 }
+
+func (c *RaftCluster) StoreHeartbeat(stats *pdpb.StoreStats) error {
+	return c.cachedCluster.handleStoreHeartbeat(stats)
+}

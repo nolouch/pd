@@ -23,6 +23,17 @@ import (
 	"github.com/pingcap/kvproto/pkg/pdpb"
 )
 
+// FIXME: export handleRegionHeartbeat later.
+func (c *RaftCluster) RegionHeartbeat(region *regionInfo) (*pdpb.RegionHeartbeatResponse, error) {
+	// If the region peer count is 0, then we should not handle this.
+	if len(region.GetPeers()) == 0 {
+		log.Warnf("invalid region, zero region peer count - %v", region)
+		return nil, errors.Errorf("invalid region, zero region peer count - %v", region)
+	}
+
+	return c.coordinator.dispatch(region), nil
+}
+
 func (c *RaftCluster) handleRegionHeartbeat(region *regionInfo) (*pdpb.RegionHeartbeatResponse, error) {
 	// If the region peer count is 0, then we should not handle this.
 	if len(region.GetPeers()) == 0 {
