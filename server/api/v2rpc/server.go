@@ -16,10 +16,13 @@
 package v2rpc
 
 import (
+	"fmt"
 	"io"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/kvproto/pkg/eraftpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/kvproto/pkg/pdpb"
 	pb "github.com/pingcap/kvproto/pkg/pdpb2"
@@ -328,64 +331,81 @@ func (s *RPCServer) GetRegionByID(ctx context.Context, request *pb.GetRegionByID
 	}, nil
 }
 
+func toPDPB2PeerStats(stats []*pb.PeerStats) []*pdpb.PeerStats {
+	ret := make([]*pdpb.PeerStats, 0, len(stats))
+	for _, s := range stats {
+		n := &pdpb.PeerStats{
+			Peer: s.Peer,
+		}
+		if s.DownSeconds != 0 {
+			n.DownSeconds = proto.Uint64(s.DownSeconds)
+		}
+		ret = append(ret, n)
+	}
+	return ret
+}
+
 func (s *RPCServer) RegionHeartbeat(svr pb.PD_RegionHeartbeatServer) error {
-	// 	for {
-	// 		req, err := svr.Recv()
-	// 		if err == io.EOF {
-	// 			return nil
-	// 		}
-	// 		if err != nil {
-	// 			return err
-	// 		}
+	for {
+		req, err := svr.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
 
-	// 		cluster, pberr := s.tryGetRaftCluster()
-	// 		if pberr != nil {
-	// 			return &pb.PutStoreResponse{
-	// 				Header: s.header(pberr),
-	// 			}, nil
-	// 		}
+		var region *server.RegionInfo
+		var res *pdpb.RegionHeartbeatResponse
+		resp := &pb.RegionHeartbeatResponse{}
+		cluster, pberr := s.tryGetRaftCluster()
+		if pberr != nil {
+			resp.Header = s.header(pberr)
+			goto RESP
+		}
 
-	// 		if pberr := checkStore(cluster, store.GetId()); pberr != nil {
-	// 			return &pb.PutStoreResponse{
-	// 				Header: s.header(pberr),
-	// 			}, nil
-	// 		}
+		region = server.NewRegionInfo(req.GetRegion(), req.GetLeader())
+		region.DownPeers = toPDPB2PeerStats(req.GetDownPeers())
+		region.PendingPeers = req.GetPendingPeers()
+		if region.GetId() == 0 {
+			pberr := &pb.Error{
+				Type:    pb.ErrorType_UNKNOWN,
+				Message: fmt.Sprintf("invalid request region, %v", req),
+			}
+			resp.Header = s.header(pberr)
+			goto RESP
+		}
+		if region.Leader == nil {
+			pberr := &pb.Error{
+				Type:    pb.ErrorType_UNKNOWN,
+				Message: fmt.Sprintf("invalid request region, %v", req),
+			}
+			resp.Header = s.header(pberr)
+			goto RESP
+		}
 
-	// 		region := newRegionInfo(request.GetRegion(), request.GetLeader())
-	// 		region.DownPeers = request.GetDownPeers()
-	// 		region.PendingPeers = request.GetPendingPeers()
-	// 		if region.GetId() == 0 {
-	// 			return nil, errors.Errorf("invalid request region, %v", request)
-	// 		}
-	// 		if region.Leader == nil {
-	// 			return nil, errors.Errorf("invalid request leader, %v", request)
-	// 		}
+		res, err = cluster.HandleRegionHeartbeat(region)
+		if err != nil {
+			pberr := &pb.Error{
+				Type:    pb.ErrorType_UNKNOWN,
+				Message: errors.Trace(err).Error(),
+			}
+			resp.Header = s.header(pberr)
+			goto RESP
+		}
 
-	// 		err = cluster.cachedCluster.handleRegionHeartbeat(region)
-	// 		if err != nil {
-	// 			return nil, errors.Trace(err)
-	// 		}
+		resp.Header = s.header(nil)
+		resp.ChangePeer = &pb.ChangePeer{
+			Peer:       res.ChangePeer.Peer,
+			ChangeType: &eraftpb.ConfChangeTypeWrapper{Type: res.ChangePeer.ChangeType},
+		}
+		resp.TransferLeader = &pb.TransferLeader{Peer: res.TransferLeader.Peer}
 
-	// 		res, err := cluster.handleRegionHeartbeat(region)
-	// 		if err != nil {
-	// 			return nil, errors.Trace(err)
-	// 		}
-
-	// 		if err != nil {
-	// 			return nil, togRPCError(errors.Trace(err))
-	// 		}
-
-	// 		resp := &pb.RegionHeartbeatResponse{
-	// 			Header: s.header(nil),
-	// 	ChangePeer: res.ChangePeer
-	// //
-	// TransferLeader:
-	// 	}
-	// 		if err := svr.Send(resp); err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	return togRPCError(errors.Errorf("not impl"))
+	RESP:
+		if err := svr.Send(resp); err != nil {
+			return err
+		}
+	}
 }
 
 func (s *RPCServer) GetClusterConfig(ctx context.Context, request *pb.GetClusterConfigRequest) (*pb.GetClusterConfigResponse, error) {
