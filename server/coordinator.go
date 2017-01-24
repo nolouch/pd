@@ -65,7 +65,7 @@ func newCoordinator(cluster *clusterInfo, opt *scheduleOption) *coordinator {
 	return c
 }
 
-func (c *coordinator) dispatch(region *regionInfo) *pdpb.RegionHeartbeatResponse {
+func (c *coordinator) dispatch(region *RegionInfo) *pdpb.RegionHeartbeatResponse {
 	c.checker.Check(region)
 
 	op := c.getOperator(region.GetId())
@@ -331,7 +331,7 @@ func newReplicaCheckController(c *coordinator) *replicaCheckController {
 	}
 }
 
-func (r *replicaCheckController) Check(region *regionInfo) {
+func (r *replicaCheckController) Check(region *RegionInfo) {
 	// Check limit and interval.
 	if time.Since(r.lastTime) < r.opt.GetReplicaScheduleInterval() {
 		return

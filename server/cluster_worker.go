@@ -24,17 +24,15 @@ import (
 )
 
 // FIXME: export handleRegionHeartbeat later.
-func (c *RaftCluster) RegionHeartbeat(region *regionInfo) (*pdpb.RegionHeartbeatResponse, error) {
-	// If the region peer count is 0, then we should not handle this.
-	if len(region.GetPeers()) == 0 {
-		log.Warnf("invalid region, zero region peer count - %v", region)
-		return nil, errors.Errorf("invalid region, zero region peer count - %v", region)
+func (c *RaftCluster) HandleRegionHeartbeat(region *RegionInfo) (*pdpb.RegionHeartbeatResponse, error) {
+	err := c.cachedCluster.handleRegionHeartbeat(region)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
-
-	return c.coordinator.dispatch(region), nil
+	return c.handleRegionHeartbeat(region)
 }
 
-func (c *RaftCluster) handleRegionHeartbeat(region *regionInfo) (*pdpb.RegionHeartbeatResponse, error) {
+func (c *RaftCluster) handleRegionHeartbeat(region *RegionInfo) (*pdpb.RegionHeartbeatResponse, error) {
 	// If the region peer count is 0, then we should not handle this.
 	if len(region.GetPeers()) == 0 {
 		log.Warnf("invalid region, zero region peer count - %v", region)

@@ -91,21 +91,21 @@ func (s *storesInfo) getStoreCount() int {
 
 type regionsInfo struct {
 	tree      *regionTree
-	regions   map[uint64]*regionInfo
-	leaders   map[uint64]map[uint64]*regionInfo
-	followers map[uint64]map[uint64]*regionInfo
+	regions   map[uint64]*RegionInfo
+	leaders   map[uint64]map[uint64]*RegionInfo
+	followers map[uint64]map[uint64]*RegionInfo
 }
 
 func newRegionsInfo() *regionsInfo {
 	return &regionsInfo{
 		tree:      newRegionTree(),
-		regions:   make(map[uint64]*regionInfo),
-		leaders:   make(map[uint64]map[uint64]*regionInfo),
-		followers: make(map[uint64]map[uint64]*regionInfo),
+		regions:   make(map[uint64]*RegionInfo),
+		leaders:   make(map[uint64]map[uint64]*RegionInfo),
+		followers: make(map[uint64]map[uint64]*RegionInfo),
 	}
 }
 
-func (r *regionsInfo) getRegion(regionID uint64) *regionInfo {
+func (r *regionsInfo) getRegion(regionID uint64) *RegionInfo {
 	region, ok := r.regions[regionID]
 	if !ok {
 		return nil
@@ -113,14 +113,14 @@ func (r *regionsInfo) getRegion(regionID uint64) *regionInfo {
 	return region.clone()
 }
 
-func (r *regionsInfo) setRegion(region *regionInfo) {
+func (r *regionsInfo) setRegion(region *RegionInfo) {
 	if origin, ok := r.regions[region.GetId()]; ok {
 		r.removeRegion(origin)
 	}
 	r.addRegion(region)
 }
 
-func (r *regionsInfo) addRegion(region *regionInfo) {
+func (r *regionsInfo) addRegion(region *RegionInfo) {
 	// Add to tree and regions.
 	r.tree.update(region.Region)
 	r.regions[region.GetId()] = region
@@ -136,7 +136,7 @@ func (r *regionsInfo) addRegion(region *regionInfo) {
 			// Add leader peer to leaders.
 			store, ok := r.leaders[storeID]
 			if !ok {
-				store = make(map[uint64]*regionInfo)
+				store = make(map[uint64]*RegionInfo)
 				r.leaders[storeID] = store
 			}
 			store[region.GetId()] = region
@@ -144,7 +144,7 @@ func (r *regionsInfo) addRegion(region *regionInfo) {
 			// Add follower peer to followers.
 			store, ok := r.followers[storeID]
 			if !ok {
-				store = make(map[uint64]*regionInfo)
+				store = make(map[uint64]*RegionInfo)
 				r.followers[storeID] = store
 			}
 			store[region.GetId()] = region
@@ -152,7 +152,7 @@ func (r *regionsInfo) addRegion(region *regionInfo) {
 	}
 }
 
-func (r *regionsInfo) removeRegion(region *regionInfo) {
+func (r *regionsInfo) removeRegion(region *RegionInfo) {
 	// Remove from tree and regions.
 	r.tree.remove(region.Region)
 	delete(r.regions, region.GetId())
@@ -165,7 +165,7 @@ func (r *regionsInfo) removeRegion(region *regionInfo) {
 	}
 }
 
-func (r *regionsInfo) searchRegion(regionKey []byte) *regionInfo {
+func (r *regionsInfo) searchRegion(regionKey []byte) *RegionInfo {
 	region := r.tree.search(regionKey)
 	if region == nil {
 		return nil
@@ -173,8 +173,8 @@ func (r *regionsInfo) searchRegion(regionKey []byte) *regionInfo {
 	return r.getRegion(region.GetId())
 }
 
-func (r *regionsInfo) getRegions() []*regionInfo {
-	regions := make([]*regionInfo, 0, len(r.regions))
+func (r *regionsInfo) getRegions() []*RegionInfo {
+	regions := make([]*RegionInfo, 0, len(r.regions))
 	for _, region := range r.regions {
 		regions = append(regions, region.clone())
 	}
@@ -205,15 +205,15 @@ func (r *regionsInfo) getStoreFollowerCount(storeID uint64) int {
 	return len(r.followers[storeID])
 }
 
-func (r *regionsInfo) randLeaderRegion(storeID uint64) *regionInfo {
+func (r *regionsInfo) randLeaderRegion(storeID uint64) *RegionInfo {
 	return randRegion(r.leaders[storeID])
 }
 
-func (r *regionsInfo) randFollowerRegion(storeID uint64) *regionInfo {
+func (r *regionsInfo) randFollowerRegion(storeID uint64) *RegionInfo {
 	return randRegion(r.followers[storeID])
 }
 
-func randRegion(regions map[uint64]*regionInfo) *regionInfo {
+func randRegion(regions map[uint64]*RegionInfo) *RegionInfo {
 	for _, region := range regions {
 		if region.Leader == nil {
 			log.Fatalf("rand region without leader: region %v", region)
@@ -354,25 +354,25 @@ func (c *clusterInfo) getStoreCount() int {
 	return c.stores.getStoreCount()
 }
 
-func (c *clusterInfo) getRegion(regionID uint64) *regionInfo {
+func (c *clusterInfo) getRegion(regionID uint64) *RegionInfo {
 	c.RLock()
 	defer c.RUnlock()
 	return c.regions.getRegion(regionID)
 }
 
-func (c *clusterInfo) searchRegion(regionKey []byte) *regionInfo {
+func (c *clusterInfo) searchRegion(regionKey []byte) *RegionInfo {
 	c.RLock()
 	defer c.RUnlock()
 	return c.regions.searchRegion(regionKey)
 }
 
-func (c *clusterInfo) putRegion(region *regionInfo) error {
+func (c *clusterInfo) putRegion(region *RegionInfo) error {
 	c.Lock()
 	defer c.Unlock()
 	return c.putRegionLocked(region.clone())
 }
 
-func (c *clusterInfo) putRegionLocked(region *regionInfo) error {
+func (c *clusterInfo) putRegionLocked(region *RegionInfo) error {
 	if c.kv != nil {
 		if err := c.kv.saveRegion(region.Region); err != nil {
 			return errors.Trace(err)
@@ -382,7 +382,7 @@ func (c *clusterInfo) putRegionLocked(region *regionInfo) error {
 	return nil
 }
 
-func (c *clusterInfo) getRegions() []*regionInfo {
+func (c *clusterInfo) getRegions() []*RegionInfo {
 	c.RLock()
 	defer c.RUnlock()
 	return c.regions.getRegions()
@@ -412,19 +412,19 @@ func (c *clusterInfo) getStoreLeaderCount(storeID uint64) int {
 	return c.regions.getStoreLeaderCount(storeID)
 }
 
-func (c *clusterInfo) randLeaderRegion(storeID uint64) *regionInfo {
+func (c *clusterInfo) randLeaderRegion(storeID uint64) *RegionInfo {
 	c.RLock()
 	defer c.RUnlock()
 	return c.regions.randLeaderRegion(storeID)
 }
 
-func (c *clusterInfo) randFollowerRegion(storeID uint64) *regionInfo {
+func (c *clusterInfo) randFollowerRegion(storeID uint64) *RegionInfo {
 	c.RLock()
 	defer c.RUnlock()
 	return c.regions.randFollowerRegion(storeID)
 }
 
-func (c *clusterInfo) getRegionStores(region *regionInfo) []*storeInfo {
+func (c *clusterInfo) getRegionStores(region *RegionInfo) []*storeInfo {
 	c.RLock()
 	defer c.RUnlock()
 	var stores []*storeInfo
@@ -436,7 +436,7 @@ func (c *clusterInfo) getRegionStores(region *regionInfo) []*storeInfo {
 	return stores
 }
 
-func (c *clusterInfo) getFollowerStores(region *regionInfo) []*storeInfo {
+func (c *clusterInfo) getFollowerStores(region *RegionInfo) []*storeInfo {
 	c.RLock()
 	defer c.RUnlock()
 	var stores []*storeInfo
@@ -468,8 +468,14 @@ func (c *clusterInfo) handleStoreHeartbeat(stats *pdpb.StoreStats) error {
 	return nil
 }
 
+// FIXME: export handleRegionHeartbeat later.
+// Moved to cluster.HandleRegionHeartbeat.
+// func (c *clusterInfo) HandleRegionHeartbeat(region *RegionInfo) error {
+// 	c.handleRegionHeartbeat(region)
+// }
+
 // handleRegionHeartbeat updates the region information.
-func (c *clusterInfo) handleRegionHeartbeat(region *regionInfo) error {
+func (c *clusterInfo) handleRegionHeartbeat(region *RegionInfo) error {
 	c.Lock()
 	defer c.Unlock()
 

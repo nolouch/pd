@@ -99,23 +99,23 @@ func (s *shuffleLeaderScheduler) Schedule(cluster *clusterInfo) Operator {
 	return newTransferLeader(region, region.GetStorePeer(storeID))
 }
 
-func newAddPeer(region *regionInfo, peer *metapb.Peer) Operator {
+func newAddPeer(region *RegionInfo, peer *metapb.Peer) Operator {
 	addPeer := newAddPeerOperator(region.GetId(), peer)
 	return newRegionOperator(region, addPeer)
 }
 
-func newRemovePeer(region *regionInfo, peer *metapb.Peer) Operator {
+func newRemovePeer(region *RegionInfo, peer *metapb.Peer) Operator {
 	removePeer := newRemovePeerOperator(region.GetId(), peer)
 	return newRegionOperator(region, removePeer)
 }
 
-func newTransferPeer(region *regionInfo, oldPeer, newPeer *metapb.Peer) Operator {
+func newTransferPeer(region *RegionInfo, oldPeer, newPeer *metapb.Peer) Operator {
 	addPeer := newAddPeerOperator(region.GetId(), newPeer)
 	removePeer := newRemovePeerOperator(region.GetId(), oldPeer)
 	return newRegionOperator(region, addPeer, removePeer)
 }
 
-func newTransferLeader(region *regionInfo, newLeader *metapb.Peer) Operator {
+func newTransferLeader(region *RegionInfo, newLeader *metapb.Peer) Operator {
 	transferLeader := newTransferLeaderOperator(region.GetId(), region.Leader, newLeader)
 	return newRegionOperator(region, transferLeader)
 }
@@ -139,7 +139,7 @@ func scheduleAddPeer(cluster *clusterInfo, s Selector, filters ...Filter) *metap
 }
 
 // scheduleRemovePeer schedules a region to remove the peer.
-func scheduleRemovePeer(cluster *clusterInfo, s Selector, filters ...Filter) (*regionInfo, *metapb.Peer) {
+func scheduleRemovePeer(cluster *clusterInfo, s Selector, filters ...Filter) (*RegionInfo, *metapb.Peer) {
 	stores := cluster.getStores()
 
 	source := s.SelectSource(stores, filters...)
@@ -159,7 +159,7 @@ func scheduleRemovePeer(cluster *clusterInfo, s Selector, filters ...Filter) (*r
 }
 
 // scheduleTransferLeader schedules a region to transfer leader to the peer.
-func scheduleTransferLeader(cluster *clusterInfo, s Selector, filters ...Filter) (*regionInfo, *metapb.Peer) {
+func scheduleTransferLeader(cluster *clusterInfo, s Selector, filters ...Filter) (*RegionInfo, *metapb.Peer) {
 	sourceStores := cluster.getStores()
 
 	source := s.SelectSource(sourceStores, filters...)

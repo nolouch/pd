@@ -24,21 +24,26 @@ import (
 )
 
 // TODO: Export this to API directly.
-type regionInfo struct {
+type RegionInfo struct {
 	*metapb.Region
 	Leader       *metapb.Peer
 	DownPeers    []*pdpb.PeerStats
 	PendingPeers []*metapb.Peer
 }
 
-func newRegionInfo(region *metapb.Region, leader *metapb.Peer) *regionInfo {
-	return &regionInfo{
+// TODO: expport newRegionInfo later.
+func NewRegionInfo(region *metapb.Region, leader *metapb.Peer) *RegionInfo {
+	return newRegionInfo(region, leader)
+}
+
+func newRegionInfo(region *metapb.Region, leader *metapb.Peer) *RegionInfo {
+	return &RegionInfo{
 		Region: region,
 		Leader: leader,
 	}
 }
 
-func (r *regionInfo) clone() *regionInfo {
+func (r *RegionInfo) clone() *RegionInfo {
 	downPeers := make([]*pdpb.PeerStats, 0, len(r.DownPeers))
 	for _, peer := range r.DownPeers {
 		downPeers = append(downPeers, proto.Clone(peer).(*pdpb.PeerStats))
@@ -47,7 +52,7 @@ func (r *regionInfo) clone() *regionInfo {
 	for _, peer := range r.PendingPeers {
 		pendingPeers = append(pendingPeers, proto.Clone(peer).(*metapb.Peer))
 	}
-	return &regionInfo{
+	return &RegionInfo{
 		Region:       proto.Clone(r.Region).(*metapb.Region),
 		Leader:       proto.Clone(r.Leader).(*metapb.Peer),
 		DownPeers:    downPeers,
@@ -55,11 +60,11 @@ func (r *regionInfo) clone() *regionInfo {
 	}
 }
 
-func (r *regionInfo) String() string {
+func (r *RegionInfo) String() string {
 	return fmt.Sprintf("%+v", *r)
 }
 
-func (r *regionInfo) GetPeer(peerID uint64) *metapb.Peer {
+func (r *RegionInfo) GetPeer(peerID uint64) *metapb.Peer {
 	for _, peer := range r.GetPeers() {
 		if peer.GetId() == peerID {
 			return peer
@@ -68,7 +73,7 @@ func (r *regionInfo) GetPeer(peerID uint64) *metapb.Peer {
 	return nil
 }
 
-func (r *regionInfo) GetDownPeer(peerID uint64) *metapb.Peer {
+func (r *RegionInfo) GetDownPeer(peerID uint64) *metapb.Peer {
 	for _, down := range r.DownPeers {
 		if down.GetPeer().GetId() == peerID {
 			return down.GetPeer()
@@ -77,7 +82,7 @@ func (r *regionInfo) GetDownPeer(peerID uint64) *metapb.Peer {
 	return nil
 }
 
-func (r *regionInfo) GetPendingPeer(peerID uint64) *metapb.Peer {
+func (r *RegionInfo) GetPendingPeer(peerID uint64) *metapb.Peer {
 	for _, peer := range r.PendingPeers {
 		if peer.GetId() == peerID {
 			return peer
@@ -86,7 +91,7 @@ func (r *regionInfo) GetPendingPeer(peerID uint64) *metapb.Peer {
 	return nil
 }
 
-func (r *regionInfo) GetStorePeer(storeID uint64) *metapb.Peer {
+func (r *RegionInfo) GetStorePeer(storeID uint64) *metapb.Peer {
 	for _, peer := range r.GetPeers() {
 		if peer.GetStoreId() == storeID {
 			return peer
@@ -95,7 +100,7 @@ func (r *regionInfo) GetStorePeer(storeID uint64) *metapb.Peer {
 	return nil
 }
 
-func (r *regionInfo) RemoveStorePeer(storeID uint64) {
+func (r *RegionInfo) RemoveStorePeer(storeID uint64) {
 	var peers []*metapb.Peer
 	for _, peer := range r.GetPeers() {
 		if peer.GetStoreId() != storeID {
@@ -105,7 +110,7 @@ func (r *regionInfo) RemoveStorePeer(storeID uint64) {
 	r.Peers = peers
 }
 
-func (r *regionInfo) GetStoreIds() map[uint64]struct{} {
+func (r *RegionInfo) GetStoreIds() map[uint64]struct{} {
 	peers := r.GetPeers()
 	stores := make(map[uint64]struct{}, len(peers))
 	for _, peer := range peers {
@@ -114,7 +119,7 @@ func (r *regionInfo) GetStoreIds() map[uint64]struct{} {
 	return stores
 }
 
-func (r *regionInfo) GetFollowers() map[uint64]*metapb.Peer {
+func (r *RegionInfo) GetFollowers() map[uint64]*metapb.Peer {
 	peers := r.GetPeers()
 	followers := make(map[uint64]*metapb.Peer, len(peers))
 	for _, peer := range peers {

@@ -66,8 +66,8 @@ type testRegionsInfoSuite struct{}
 
 // Create n regions (0..n) of n stores (0..n).
 // Each region contains np peers, the first peer is the leader.
-func newTestRegions(n, np uint64) []*regionInfo {
-	regions := make([]*regionInfo, 0, n)
+func newTestRegions(n, np uint64) []*RegionInfo {
+	regions := make([]*RegionInfo, 0, n)
 	for i := uint64(0); i < n; i++ {
 		peers := make([]*metapb.Peer, 0, np)
 		for j := uint64(0); j < np; j++ {
@@ -150,12 +150,12 @@ func (s *testRegionsInfoSuite) Test(c *C) {
 	}
 }
 
-func checkRegion(c *C, a *regionInfo, b *regionInfo) {
+func checkRegion(c *C, a *RegionInfo, b *RegionInfo) {
 	c.Assert(a.Region, DeepEquals, b.Region)
 	c.Assert(a.Leader, DeepEquals, b.Leader)
 }
 
-func checkRegions(c *C, cache *regionsInfo, regions []*regionInfo) {
+func checkRegions(c *C, cache *regionsInfo, regions []*RegionInfo) {
 	regionCount := make(map[uint64]int)
 	leaderCount := make(map[uint64]int)
 	followerCount := make(map[uint64]int)

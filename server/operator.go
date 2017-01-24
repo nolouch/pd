@@ -31,18 +31,18 @@ const (
 type Operator interface {
 	GetRegionID() uint64
 	GetResourceKind() ResourceKind
-	Do(region *regionInfo) (*pdpb.RegionHeartbeatResponse, bool)
+	Do(region *RegionInfo) (*pdpb.RegionHeartbeatResponse, bool)
 }
 
 type regionOperator struct {
-	Region *regionInfo `json:"region"`
+	Region *RegionInfo `json:"region"`
 	Start  time.Time   `json:"start"`
 	End    time.Time   `json:"end"`
 	Index  int         `json:"index"`
 	Ops    []Operator  `json:"operators"`
 }
 
-func newRegionOperator(region *regionInfo, ops ...Operator) *regionOperator {
+func newRegionOperator(region *RegionInfo, ops ...Operator) *regionOperator {
 	// Do some check here, just fatal because it must be bug.
 	if len(ops) == 0 {
 		log.Fatal("new region operator with no ops")
@@ -73,7 +73,7 @@ func (op *regionOperator) GetResourceKind() ResourceKind {
 	return op.Ops[0].GetResourceKind()
 }
 
-func (op *regionOperator) Do(region *regionInfo) (*pdpb.RegionHeartbeatResponse, bool) {
+func (op *regionOperator) Do(region *RegionInfo) (*pdpb.RegionHeartbeatResponse, bool) {
 	if time.Since(op.Start) > maxOperatorWaitTime {
 		log.Errorf("%s : operator timeout", op)
 		return nil, true
@@ -133,7 +133,7 @@ func (op *changePeerOperator) GetResourceKind() ResourceKind {
 	return storageKind
 }
 
-func (op *changePeerOperator) Do(region *regionInfo) (*pdpb.RegionHeartbeatResponse, bool) {
+func (op *changePeerOperator) Do(region *RegionInfo) (*pdpb.RegionHeartbeatResponse, bool) {
 	// Check if operator is finished.
 	peer := op.ChangePeer.GetPeer()
 	switch op.ChangePeer.GetChangeType() {
@@ -189,7 +189,7 @@ func (op *transferLeaderOperator) GetResourceKind() ResourceKind {
 	return leaderKind
 }
 
-func (op *transferLeaderOperator) Do(region *regionInfo) (*pdpb.RegionHeartbeatResponse, bool) {
+func (op *transferLeaderOperator) Do(region *RegionInfo) (*pdpb.RegionHeartbeatResponse, bool) {
 	// Check if operator is finished.
 	if region.Leader.GetId() == op.NewLeader.GetId() {
 		return nil, true
