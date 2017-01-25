@@ -1,5 +1,5 @@
 hash: 8b5f0e0c50eeb6c7e456924785767c942d0fd47df774e7e03d1266f7161a7d5f
-updated: 2017-01-21T23:07:35.094738725+08:00
+updated: 2017-01-25T19:18:05.566948131+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -130,7 +130,7 @@ imports:
 - name: github.com/pingcap/check
   version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
 - name: github.com/pingcap/kvproto
-  version: c6eb530ade93c496ca5886f9890b3df8f6372c72
+  version: a6751b0d0db0dfed4d83350ce87c44cd9ff1f546
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
