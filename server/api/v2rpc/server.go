@@ -118,6 +118,14 @@ func (s *RPCServer) Bootstrap(ctx context.Context, request *pb.BootstrapRequest)
 		}, nil
 	}
 
+	req := &pdpb.BootstrapRequest{
+		Store:  request.Store,
+		Region: request.Region,
+	}
+	if _, err := s.BootstrapCluster(req); err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &pb.BootstrapResponse{
 		Header: s.header(nil),
 	}, nil

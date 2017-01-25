@@ -199,6 +199,11 @@ func checkBootstrapRequest(clusterID uint64, req *pdpb.BootstrapRequest) error {
 	return nil
 }
 
+// FIXME: export bootstrapCluster later.
+func (s *Server) BootstrapCluster(req *pdpb.BootstrapRequest) (*pdpb.Response, error) {
+	return s.bootstrapCluster(req)
+}
+
 func (s *Server) bootstrapCluster(req *pdpb.BootstrapRequest) (*pdpb.Response, error) {
 	clusterID := s.clusterID
 
