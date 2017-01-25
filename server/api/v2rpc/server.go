@@ -17,7 +17,6 @@ package v2rpc
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/juju/errors"
@@ -201,57 +200,44 @@ func (s *RPCServer) PutStore(ctx context.Context, request *pb.PutStoreRequest) (
 	}, nil
 }
 
-func (s *RPCServer) StoreHeartbeat(svr pb.PD_StoreHeartbeatServer) error {
-	for {
-		req, err := svr.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
+func (s *RPCServer) StoreHeartbeat(ctx context.Context, request *pb.StoreHeartbeatRequest) (*pb.StoreHeartbeatResponse, error) {
+	resp := &pb.StoreHeartbeatResponse{}
+	cluster, pberr := s.tryGetRaftCluster()
+	if pberr != nil {
+		resp.Header = s.header(pberr)
 
-		var stats *pdpb.StoreStats
-		resp := &pb.StoreHeartbeatResponse{}
-		cluster, pberr := s.tryGetRaftCluster()
-		if pberr != nil {
-			resp.Header = s.header(pberr)
-			goto RESP
-		}
-
-		if pberr := checkStore(cluster, req.Stats.GetStoreId()); pberr != nil {
-			resp.Header = s.header(pberr)
-			goto RESP
-		}
-
-		stats = &pdpb.StoreStats{
-			StoreId:            req.Stats.StoreId,
-			Capacity:           req.Stats.Capacity,
-			Available:          req.Stats.Available,
-			RegionCount:        req.Stats.RegionCount,
-			SendingSnapCount:   req.Stats.SendingSnapCount,
-			ReceivingSnapCount: req.Stats.ReceivingSnapCount,
-			StartTime:          req.Stats.StartTime,
-			ApplyingSnapCount:  req.Stats.ApplyingSnapCount,
-			IsBusy:             req.Stats.IsBusy,
-		}
-		err = cluster.StoreHeartbeat(stats)
-		if err != nil {
-			pberr := &pb.Error{
-				Type:    pb.ErrorType_UNKNOWN,
-				Message: errors.Trace(err).Error(),
-			}
-			resp.Header = s.header(pberr)
-			goto RESP
-		}
-
-		resp = &pb.StoreHeartbeatResponse{Header: s.header(nil)}
-
-	RESP:
-		if err := svr.Send(resp); err != nil {
-			return err
-		}
+		return resp, nil
 	}
+
+	if pberr := checkStore(cluster, request.Stats.GetStoreId()); pberr != nil {
+		resp.Header = s.header(pberr)
+
+		return resp, nil
+	}
+
+	stats := &pdpb.StoreStats{
+		StoreId:            request.Stats.StoreId,
+		Capacity:           request.Stats.Capacity,
+		Available:          request.Stats.Available,
+		RegionCount:        request.Stats.RegionCount,
+		SendingSnapCount:   request.Stats.SendingSnapCount,
+		ReceivingSnapCount: request.Stats.ReceivingSnapCount,
+		StartTime:          request.Stats.StartTime,
+		ApplyingSnapCount:  request.Stats.ApplyingSnapCount,
+		IsBusy:             request.Stats.IsBusy,
+	}
+	err := cluster.StoreHeartbeat(stats)
+	if err != nil {
+		pberr := &pb.Error{
+			Type:    pb.ErrorType_UNKNOWN,
+			Message: errors.Trace(err).Error(),
+		}
+		resp.Header = s.header(pberr)
+
+		return resp, nil
+	}
+
+	return &pb.StoreHeartbeatResponse{Header: s.header(nil)}, nil
 }
 
 func (s *RPCServer) AskSplit(ctx context.Context, request *pb.AskSplitRequest) (*pb.AskSplitResponse, error) {
@@ -353,67 +339,62 @@ func toPDPB2PeerStats(stats []*pb.PeerStats) []*pdpb.PeerStats {
 	return ret
 }
 
-func (s *RPCServer) RegionHeartbeat(svr pb.PD_RegionHeartbeatServer) error {
-	for {
-		req, err := svr.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
+func (s *RPCServer) RegionHeartbeat(ctx context.Context, request *pb.RegionHeartbeatRequest) (*pb.RegionHeartbeatResponse, error) {
+	resp := &pb.RegionHeartbeatResponse{}
+	cluster, pberr := s.tryGetRaftCluster()
+	if pberr != nil {
+		resp.Header = s.header(pberr)
 
-		var region *server.RegionInfo
-		var res *pdpb.RegionHeartbeatResponse
-		resp := &pb.RegionHeartbeatResponse{}
-		cluster, pberr := s.tryGetRaftCluster()
-		if pberr != nil {
-			resp.Header = s.header(pberr)
-			goto RESP
-		}
+		return resp, nil
+	}
 
-		region = server.NewRegionInfo(req.GetRegion(), req.GetLeader())
-		region.DownPeers = toPDPB2PeerStats(req.GetDownPeers())
-		region.PendingPeers = req.GetPendingPeers()
-		if region.GetId() == 0 {
-			pberr := &pb.Error{
-				Type:    pb.ErrorType_UNKNOWN,
-				Message: fmt.Sprintf("invalid request region, %v", req),
+	region := server.NewRegionInfo(request.GetRegion(), request.GetLeader())
+	region.DownPeers = toPDPB2PeerStats(request.GetDownPeers())
+	region.PendingPeers = request.GetPendingPeers()
+	if region.GetId() == 0 {
+		pberr := &pb.Error{
+			Type:    pb.ErrorType_UNKNOWN,
+			Message: fmt.Sprintf("invalid request region, %v", request),
+		}
+		resp.Header = s.header(pberr)
+
+		return resp, nil
+	}
+	if region.Leader == nil {
+		pberr := &pb.Error{
+			Type:    pb.ErrorType_UNKNOWN,
+			Message: fmt.Sprintf("invalid request leader, %v", request),
+		}
+		resp.Header = s.header(pberr)
+
+		return resp, nil
+	}
+
+	res, err := cluster.HandleRegionHeartbeat(region)
+	if err != nil {
+		pberr := &pb.Error{
+			Type:    pb.ErrorType_UNKNOWN,
+			Message: errors.Trace(err).Error(),
+		}
+		resp.Header = s.header(pberr)
+
+		return resp, nil
+	}
+
+	resp.Header = s.header(nil)
+	if res != nil {
+		if res.ChangePeer != nil {
+			resp.ChangePeer = &pb.ChangePeer{
+				Peer:       res.ChangePeer.Peer,
+				ChangeType: &eraftpb.ConfChangeTypeWrapper{Type: res.ChangePeer.ChangeType},
 			}
-			resp.Header = s.header(pberr)
-			goto RESP
 		}
-		if region.Leader == nil {
-			pberr := &pb.Error{
-				Type:    pb.ErrorType_UNKNOWN,
-				Message: fmt.Sprintf("invalid request region, %v", req),
-			}
-			resp.Header = s.header(pberr)
-			goto RESP
-		}
-
-		res, err = cluster.HandleRegionHeartbeat(region)
-		if err != nil {
-			pberr := &pb.Error{
-				Type:    pb.ErrorType_UNKNOWN,
-				Message: errors.Trace(err).Error(),
-			}
-			resp.Header = s.header(pberr)
-			goto RESP
-		}
-
-		resp.Header = s.header(nil)
-		resp.ChangePeer = &pb.ChangePeer{
-			Peer:       res.ChangePeer.Peer,
-			ChangeType: &eraftpb.ConfChangeTypeWrapper{Type: res.ChangePeer.ChangeType},
-		}
-		resp.TransferLeader = &pb.TransferLeader{Peer: res.TransferLeader.Peer}
-
-	RESP:
-		if err := svr.Send(resp); err != nil {
-			return err
+		if res.TransferLeader != nil {
+			resp.TransferLeader = &pb.TransferLeader{Peer: res.TransferLeader.Peer}
 		}
 	}
+
+	return resp, nil
 }
 
 func (s *RPCServer) GetClusterConfig(ctx context.Context, request *pb.GetClusterConfigRequest) (*pb.GetClusterConfigResponse, error) {
