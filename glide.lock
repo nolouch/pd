@@ -1,5 +1,5 @@
-hash: 8230300f7fc65a14a8b20d08f5f909020ed556b9bf745dff56333432e3333d93
-updated: 2017-07-21T10:24:21.756681879+08:00
+hash: 7c17af162febc9a7729636487275eb4397e0d39a28ee445e67fd5bfffc5d6ea0
+updated: 2017-08-16T18:32:23.652128739+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -149,7 +149,7 @@ imports:
 - name: github.com/pingcap/check
   version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
 - name: github.com/pingcap/kvproto
-  version: ebe86abfa6519ffefdf2946fba762a894fe88256
+  version: aa89780c80ffbad78c6aaaf0c53829547cf3a5c2
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -185,7 +185,7 @@ imports:
   repo: https://github.com/spf13/cobra.git
   vcs: git
 - name: github.com/spf13/pflag
-  version: e57e3eeb33f795204c1ca35f56c44f83227c6e66
+  version: 08b1a584251b5b62f458943640fc8ebd4d50aaa5
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - name: github.com/ugorji/go
@@ -224,14 +224,14 @@ imports:
   subpackages:
   - unix
 - name: golang.org/x/text
-  version: 836efe42bb4aa16aaa17b9c155d8813d336ed720
+  version: e56139fd9c5bc7244c76116c68e500765bb6db6b
   subpackages:
   - secure/bidirule
   - transform
   - unicode/bidi
   - unicode/norm
 - name: google.golang.org/genproto
-  version: b0a3dcfcd1a9bd48e63634bd8802960804cf8315
+  version: 6b7d9516179cd47f4714cfeb0103ad1dede756c4
   subpackages:
   - googleapis/rpc/status
 - name: google.golang.org/grpc
