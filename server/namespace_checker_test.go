@@ -67,7 +67,6 @@ func (s *testNameSpaceCheckerSuite) TestCheckerWhenAbleToMove(c *C) {
 
 }
 
-
 func (s *testNameSpaceCheckerSuite) TestCheckerWhenNoNeedToMove(c *C) {
 
 	cluster := newClusterInfo(newMockIDAllocator())
@@ -82,10 +81,9 @@ func (s *testNameSpaceCheckerSuite) TestCheckerWhenNoNeedToMove(c *C) {
 
 	//| region_id | leader_sotre | follower_store | follower_store |
 	//|-----------|--------------|----------------|----------------|
-	//|     1     |       1      |        3       |       4        |
+	//|     1     |       1      |        2       |       6        |
 	//|     2     |       1      |        2       |       5        |
 	//|     3     |       1      |        4       |       6        |
-
 	tc.addLeaderRegion(1, 1, 2, 6)
 	tc.addLeaderRegion(2, 1, 3, 4)
 	tc.addLeaderRegion(3, 1, 4, 6)
@@ -115,6 +113,5 @@ func (s *testNameSpaceCheckerSuite) TestCheckerWhenNoNeedToMove(c *C) {
 	region2 := tc.GetRegion(2)
 	// all stores belongs to ns2 contains at least one peer of region2, so no need to move
 	c.Assert(namespaceChecker.Check(region2), IsNil)
-
 
 }
