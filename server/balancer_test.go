@@ -844,6 +844,7 @@ func checkRemovePeer(c *C, op *schedule.Operator, storeID uint64) {
 }
 
 func checkTransferPeer(c *C, op *schedule.Operator, sourceID, targetID uint64) {
+	c.Assert(op, NotNil)
 	if op.Len() == 2 {
 		c.Assert(op.Step(0).(schedule.AddPeer).ToStore, Equals, targetID)
 		c.Assert(op.Step(1).(schedule.RemovePeer).FromStore, Equals, sourceID)
