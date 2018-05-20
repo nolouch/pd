@@ -120,6 +120,10 @@ func (o *scheduleOption) GetMergeScheduleLimit(name string) uint64 {
 	return o.load().MergeScheduleLimit
 }
 
+func (o *scheduleOption) GetPatrolScanRegionLimit(name string) uint64 {
+	return o.load().PatrolScanRegionLimit
+}
+
 func (o *scheduleOption) GetTolerantSizeRatio() float64 {
 	return o.load().TolerantSizeRatio
 }

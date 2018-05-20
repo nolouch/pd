@@ -534,6 +534,10 @@ func (c *clusterInfo) GetReplicaScheduleLimit() uint64 {
 	return c.opt.GetReplicaScheduleLimit(namespace.DefaultNamespace)
 }
 
+func (c *clusterInfo) GetPatrolScanRegionLimit() uint64 {
+	return c.opt.GetPatrolScanRegionLimit(namespace.DefaultNamespace)
+}
+
 func (c *clusterInfo) GetMergeScheduleLimit() uint64 {
 	return c.opt.GetMergeScheduleLimit(namespace.DefaultNamespace)
 }

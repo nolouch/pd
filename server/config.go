@@ -377,6 +377,8 @@ type ScheduleConfig struct {
 	ReplicaScheduleLimit uint64 `toml:"replica-schedule-limit,omitempty" json:"replica-schedule-limit"`
 	// MergeScheduleLimit is the max coexist merge schedules.
 	MergeScheduleLimit uint64 `toml:"merge-schedule-limit,omitempty" json:"merge-schedule-limit"`
+	// PatrolScanRegionLimit is the scan length to scan regions in some checker.
+	PatrolScanRegionLimit uint64 `toml:"patrol-scan-region-limit,omitempy" json:"patrol-scan-region-limit"`
 	// TolerantSizeRatio is the ratio of buffer size for balance scheduler.
 	TolerantSizeRatio float64 `toml:"tolerant-size-ratio,omitempty" json:"tolerant-size-ratio"`
 	//
@@ -401,37 +403,39 @@ func (c *ScheduleConfig) clone() *ScheduleConfig {
 	schedulers := make(SchedulerConfigs, len(c.Schedulers))
 	copy(schedulers, c.Schedulers)
 	return &ScheduleConfig{
-		MaxSnapshotCount:     c.MaxSnapshotCount,
-		MaxPendingPeerCount:  c.MaxPendingPeerCount,
-		MaxMergeRegionSize:   c.MaxMergeRegionSize,
-		SplitMergeInterval:   c.SplitMergeInterval,
-		MaxStoreDownTime:     c.MaxStoreDownTime,
-		LeaderScheduleLimit:  c.LeaderScheduleLimit,
-		RegionScheduleLimit:  c.RegionScheduleLimit,
-		ReplicaScheduleLimit: c.ReplicaScheduleLimit,
-		MergeScheduleLimit:   c.MergeScheduleLimit,
-		TolerantSizeRatio:    c.TolerantSizeRatio,
-		LowSpaceRatio:        c.LowSpaceRatio,
-		HighSpaceRatio:       c.HighSpaceRatio,
-		EnableRaftLearner:    c.EnableRaftLearner,
-		Schedulers:           schedulers,
+		MaxSnapshotCount:      c.MaxSnapshotCount,
+		MaxPendingPeerCount:   c.MaxPendingPeerCount,
+		MaxMergeRegionSize:    c.MaxMergeRegionSize,
+		SplitMergeInterval:    c.SplitMergeInterval,
+		MaxStoreDownTime:      c.MaxStoreDownTime,
+		LeaderScheduleLimit:   c.LeaderScheduleLimit,
+		RegionScheduleLimit:   c.RegionScheduleLimit,
+		ReplicaScheduleLimit:  c.ReplicaScheduleLimit,
+		MergeScheduleLimit:    c.MergeScheduleLimit,
+		PatrolScanRegionLimit: c.PatrolScanRegionLimit,
+		TolerantSizeRatio:     c.TolerantSizeRatio,
+		LowSpaceRatio:         c.LowSpaceRatio,
+		HighSpaceRatio:        c.HighSpaceRatio,
+		EnableRaftLearner:     c.EnableRaftLearner,
+		Schedulers:            schedulers,
 	}
 }
 
 const (
-	defaultMaxReplicas          = 3
-	defaultMaxSnapshotCount     = 3
-	defaultMaxPendingPeerCount  = 16
-	defaultMaxMergeRegionSize   = 20
-	defaultSplitMergeInterval   = 1 * time.Hour
-	defaultMaxStoreDownTime     = 30 * time.Minute
-	defaultLeaderScheduleLimit  = 4
-	defaultRegionScheduleLimit  = 4
-	defaultReplicaScheduleLimit = 8
-	defaultMergeScheduleLimit   = 8
-	defaultTolerantSizeRatio    = 5
-	defaultLowSpaceRatio        = 0.8
-	defaultHighSpaceRatio       = 0.6
+	defaultMaxReplicas           = 3
+	defaultMaxSnapshotCount      = 3
+	defaultMaxPendingPeerCount   = 16
+	defaultMaxMergeRegionSize    = 20
+	defaultSplitMergeInterval    = 1 * time.Hour
+	defaultMaxStoreDownTime      = 30 * time.Minute
+	defaultLeaderScheduleLimit   = 4
+	defaultRegionScheduleLimit   = 4
+	defaultReplicaScheduleLimit  = 8
+	defaultMergeScheduleLimit    = 8
+	defaultTolerantSizeRatio     = 5
+	defaultLowSpaceRatio         = 0.8
+	defaultHighSpaceRatio        = 0.6
+	defaultPatrolScanRegionLimit = 128 // It takes about 14 minutes to iterate 1 million regions.
 )
 
 func (c *ScheduleConfig) adjust() error {
@@ -444,6 +448,7 @@ func (c *ScheduleConfig) adjust() error {
 	adjustUint64(&c.RegionScheduleLimit, defaultRegionScheduleLimit)
 	adjustUint64(&c.ReplicaScheduleLimit, defaultReplicaScheduleLimit)
 	adjustUint64(&c.MergeScheduleLimit, defaultMergeScheduleLimit)
+	adjustUint64(&c.PatrolScanRegionLimit, defaultPatrolScanRegionLimit)
 	adjustFloat64(&c.TolerantSizeRatio, defaultTolerantSizeRatio)
 	adjustFloat64(&c.LowSpaceRatio, defaultLowSpaceRatio)
 	adjustFloat64(&c.HighSpaceRatio, defaultHighSpaceRatio)

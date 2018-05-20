@@ -40,8 +40,7 @@ const (
 	regionheartbeatSendChanCap = 1024
 	hotRegionScheduleName      = "balance-hot-region-scheduler"
 
-	patrolRegionInterval  = time.Millisecond * 100
-	patrolScanRegionLimit = 128 // It takes about 14 minutes to iterate 1 million regions.
+	patrolRegionInterval = time.Millisecond * 100
 )
 
 var (
@@ -128,7 +127,7 @@ func (c *coordinator) patrolRegions() {
 			return
 		}
 
-		regions := c.cluster.ScanRegions(key, patrolScanRegionLimit)
+		regions := c.cluster.ScanRegions(key, int(c.cluster.GetReplicaScheduleLimit()))
 		if len(regions) == 0 {
 			// reset scan key.
 			key = nil
