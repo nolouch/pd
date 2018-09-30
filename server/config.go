@@ -352,6 +352,7 @@ func (c *Config) adjust(meta *toml.MetaData) error {
 	if meta == nil || !meta.IsDefined("enable-prevote") {
 		c.PreVote = true
 	}
+	c.PDServerCfg.EnableRegionStorage = true
 	return nil
 }
 
