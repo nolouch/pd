@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/kvproto/pkg/pdpb"
+	"github.com/pingcap/pd/server/core"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -143,6 +144,9 @@ func (s *regionSyncer) startSyncWithLeader(addr string) {
 	s.RLock()
 	closed := s.closed
 	s.RUnlock()
+
+	regions := core.NewRegionsInfo()
+	s.server.kv.LoadRegions(regions)
 	go func() {
 		defer s.wg.Done()
 		for {
@@ -172,8 +176,10 @@ func (s *regionSyncer) startSyncWithLeader(addr string) {
 					break
 				}
 				for _, r := range resp.GetRegions() {
+					regions.AddRegion(core.NewRegionInfo(r, nil))
 					s.server.kv.SaveRegion(r)
 				}
+				syncerRegionGauge.WithLabelValues(s.server.GetAddr()).Set(float64(regions.GetRegionCount()))
 			}
 		}
 	}()

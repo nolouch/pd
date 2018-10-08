@@ -41,6 +41,14 @@ var (
 			Help:      "Counter of schedule operators.",
 		}, []string{"type", "event"})
 
+	syncerRegionGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "pd",
+			Subsystem: "server",
+			Name:      "syncer_region",
+			Help:      "Status of the syncer.",
+		}, []string{"addr"})
+
 	operatorDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "pd",
@@ -183,4 +191,5 @@ func init() {
 	prometheus.MustRegister(metadataGauge)
 	prometheus.MustRegister(etcdStateGauge)
 	prometheus.MustRegister(patrolCheckRegionsHistogram)
+	prometheus.MustRegister(syncerRegionGauge)
 }
