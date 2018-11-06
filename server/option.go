@@ -14,6 +14,7 @@
 package server
 
 import (
+	"fmt"
 	"reflect"
 	"sync/atomic"
 	"time"
@@ -295,10 +296,12 @@ func (o *scheduleOption) reload(kv *core.KV) error {
 		ClusterVersion: o.loadClusterVersion(),
 		PDServerCfg:    *o.loadPDServerConfig(),
 	}
+	fmt.Println("Debug reload before:", cfg.PDServerCfg)
 	isExist, err := kv.LoadConfig(cfg)
 	if err != nil {
 		return err
 	}
+	fmt.Println("Debug reload after:", cfg.PDServerCfg)
 	o.adjustScheduleCfg(cfg)
 	if isExist {
 		o.store(&cfg.Schedule)

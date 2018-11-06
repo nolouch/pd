@@ -375,10 +375,12 @@ func (s *Server) leaderCmp() clientv3.Cmp {
 }
 
 func (s *Server) reloadConfigFromKV() error {
+	fmt.Println("Debug before:", s.scheduleOpt.loadPDServerConfig().EnableRegionStorage)
 	err := s.scheduleOpt.reload(s.kv)
 	if err != nil {
 		return err
 	}
+	fmt.Println("Debug after:", s.scheduleOpt.loadPDServerConfig().EnableRegionStorage)
 	if s.scheduleOpt.loadPDServerConfig().EnableRegionStorage {
 		s.kv.SwitchToRegionStorage()
 		log.Info("server enable region storage")
