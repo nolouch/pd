@@ -146,6 +146,12 @@ func (s *RegionSyncer) Sync(stream pdpb.PD_SyncRegionsServer) error {
 
 func (s *RegionSyncer) syncHistoryRegion(startIndex uint64, stream pdpb.PD_SyncRegionsServer) error {
 	records := s.history.RecordsFrom(startIndex)
+	if len(records) == 0 {
+		log.Warnf("no history regions form index %d, the leader maybe restarted", startIndex)
+		// TODO: Full synchronization
+		// if startIndex == 0 {}
+		return nil
+	}
 	log.Infof("syncer server sync the history regions from index:%d, got: %d", startIndex, len(records))
 	regions := make([]*metapb.Region, len(records))
 	for i, r := range records {
