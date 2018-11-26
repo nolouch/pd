@@ -94,7 +94,7 @@ func (c *coordinator) dispatch(region *core.RegionInfo) {
 		timeout := op.IsTimeout()
 		if step := op.Check(region); step != nil && !timeout {
 			operatorCounter.WithLabelValues(op.Desc(), "check").Inc()
-			c.sendScheduleCommand(region, step)
+			c.sendScheduleCommand(region, step, "heartbeat")
 			return
 		}
 		if op.IsFinish() {
@@ -457,7 +457,7 @@ func (c *coordinator) addOperatorLocked(op *schedule.Operator) bool {
 
 	if region := c.cluster.GetRegion(op.RegionID()); region != nil {
 		if step := op.Check(region); step != nil {
-			c.sendScheduleCommand(region, step)
+			c.sendScheduleCommand(region, step, "add-operator "+op.Desc())
 		}
 	}
 
@@ -567,8 +567,8 @@ func (c *coordinator) getHistory(start time.Time) []schedule.OperatorHistory {
 	return histories
 }
 
-func (c *coordinator) sendScheduleCommand(region *core.RegionInfo, step schedule.OperatorStep) {
-	log.Infof("[region %v] send schedule command: %s", region.GetID(), step)
+func (c *coordinator) sendScheduleCommand(region *core.RegionInfo, step schedule.OperatorStep, tag string) {
+	log.Infof("[region %v] send schedule command: %s (%s)", region.GetID(), step, tag)
 	switch s := step.(type) {
 	case schedule.TransferLeader:
 		cmd := &pdpb.RegionHeartbeatResponse{
