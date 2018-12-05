@@ -29,6 +29,10 @@ func init() {
 	schedule.RegisterScheduler("hot-region", func(opController *schedule.OperatorController, args []string) (schedule.Scheduler, error) {
 		return newBalanceHotRegionsScheduler(opController), nil
 	})
+	// NOTE: use to test
+	schedule.RegisterScheduler("hot-jam-region", func(opController *schedule.OperatorController, args []string) (schedule.Scheduler, error) {
+		return newBalanceHotRegionsJamScheduler(opController), nil
+	})
 	// FIXME: remove this two schedule after the balance test move in schedulers package
 	schedule.RegisterScheduler("hot-write-region", func(opController *schedule.OperatorController, args []string) (schedule.Scheduler, error) {
 		return newBalanceHotWriteRegionsScheduler(opController), nil
@@ -50,6 +54,7 @@ type BalanceType int
 const (
 	hotWriteRegionBalance BalanceType = iota
 	hotReadRegionBalance
+	hotWriteJamBalance
 )
 
 type storeStatistics struct {
@@ -84,6 +89,17 @@ func newBalanceHotRegionsScheduler(opController *schedule.OperatorController) *b
 		limit:         1,
 		stats:         newStoreStaticstics(),
 		types:         []BalanceType{hotWriteRegionBalance, hotReadRegionBalance},
+		r:             rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
+}
+
+func newBalanceHotRegionsJamScheduler(opController *schedule.OperatorController) *balanceHotRegionsScheduler {
+	base := newBaseScheduler(opController)
+	return &balanceHotRegionsScheduler{
+		baseScheduler: base,
+		limit:         1,
+		stats:         newStoreStaticstics(),
+		types:         []BalanceType{hotWriteRegionBalance, hotReadRegionBalance, hotWriteJamBalance},
 		r:             rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
@@ -148,6 +164,10 @@ func (h *balanceHotRegionsScheduler) dispatch(typ BalanceType, cluster schedule.
 		h.stats.writeStatAsLeader = h.calcScore(cluster.RegionWriteStats(), cluster, core.LeaderKind)
 		h.stats.writeStatAsPeer = h.calcScore(cluster.RegionWriteStats(), cluster, core.RegionKind)
 		return h.balanceHotWriteRegions(cluster)
+	case hotWriteJamBalance:
+		h.stats.writeStatAsLeader = h.calcScore(cluster.RegionReadStats(), cluster, core.LeaderKind)
+		h.stats.writeStatAsPeer = h.calcScore(cluster.RegionWriteStats(), cluster, core.RegionKind)
+		return h.randomJam(cluster)
 	}
 	return nil
 }
@@ -195,6 +215,62 @@ func (h *balanceHotRegionsScheduler) balanceHotWriteRegions(cluster schedule.Clu
 		}
 	}
 
+	schedulerCounter.WithLabelValues(h.GetName(), "skip").Inc()
+	return nil
+}
+
+func (h *balanceHotRegionsScheduler) randomJam(cluster schedule.Cluster) []*schedule.Operator {
+	if !h.allowBalanceRegion(cluster) {
+		return nil
+	}
+	// random Jam hot region
+	for _, stats := range h.stats.writeStatAsLeader {
+		for _, i := range h.r.Perm(stats.RegionsStat.Len()) {
+			r := stats.RegionsStat[i]
+			srcRegion := cluster.GetRegion(r.RegionID)
+			if srcRegion == nil || len(srcRegion.GetDownPeers()) != 0 || len(srcRegion.GetPendingPeers()) != 0 {
+				continue
+			}
+			srcStoreID := srcRegion.GetLeader().GetStoreId()
+			srcStore := cluster.GetStore(srcStoreID)
+			filters := []schedule.Filter{
+				schedule.NewExcludedFilter(srcRegion.GetStoreIds(), srcRegion.GetStoreIds()),
+				schedule.NewDistinctScoreFilter(cluster.GetLocationLabels(), cluster.GetRegionStores(srcRegion), srcStore),
+			}
+			stores := cluster.GetStores()
+			destStoreIDs := make([]uint64, 0, len(stores))
+			for _, store := range stores {
+				if schedule.FilterTarget(cluster, store, filters) {
+					continue
+				}
+				destStoreIDs = append(destStoreIDs, store.GetId())
+			}
+			if len(destStoreIDs) == 0 {
+				return nil
+			}
+			destStoreID := destStoreIDs[rand.Intn(len(destStoreIDs))]
+			if destStoreID == 0 {
+				return nil
+			}
+			srcPeer := srcRegion.GetStorePeer(srcStoreID)
+			if srcPeer == nil {
+				return nil
+			}
+			destPeer, err := cluster.AllocPeer(destStoreID)
+			if err != nil {
+				log.Errorf("failed to allocate peer: %v", err)
+				return nil
+			}
+			schedulerCounter.WithLabelValues(h.GetName(), "move_jam_peer").Inc()
+			st := []schedule.OperatorStep{
+				schedule.AddLearner{ToStore: destStoreID, PeerID: destPeer.GetId()},
+				schedule.PromoteLearner{ToStore: destStoreID, PeerID: destPeer.GetId()},
+				schedule.TransferLeader{ToStore: destStoreID, FromStore: srcStoreID},
+				schedule.RemovePeer{FromStore: srcRegion.GetLeader().GetStoreId()},
+			}
+			return []*schedule.Operator{schedule.NewOperator("randomMoveHotRegion", srcRegion.GetID(), srcRegion.GetRegionEpoch(), schedule.OpRegion|schedule.OpLeader, st...)}
+		}
+	}
 	schedulerCounter.WithLabelValues(h.GetName(), "skip").Inc()
 	return nil
 }
