@@ -88,7 +88,7 @@ func newBalanceHotRegionsScheduler(opController *schedule.OperatorController) *b
 		baseScheduler: base,
 		limit:         1,
 		stats:         newStoreStaticstics(),
-		types:         []BalanceType{hotWriteRegionBalance, hotReadRegionBalance},
+		types:         []BalanceType{hotWriteRegionBalance, hotReadRegionBalance, hotWriteJamBalance},
 		r:             rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
