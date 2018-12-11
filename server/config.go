@@ -259,7 +259,7 @@ func (c *Config) Parse(arguments []string) error {
 	if len(c.FlagSet.Args()) != 0 {
 		return errors.Errorf("'%s' is an invalid flag", c.FlagSet.Arg(0))
 	}
-
+	c.PDServerCfg.UseRegionStorage = true
 	err = c.Adjust(meta)
 	return err
 }
