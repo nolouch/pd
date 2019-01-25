@@ -1,5 +1,8 @@
 # PD Change Log
 
+## v2.1.3
+- Fix the `Watch` issue about leader election [#1404](https://github.com/pingcap/pd/pull/1404)
+
 ## v3.0.0-beta
 - Add `RegionStorage` to store Region metadata separately [#1237](https://github.com/pingcap/pd/pull/1237)
 - Add shuffle hot Region scheduler [#1361](https://github.com/pingcap/pd/pull/1361)
