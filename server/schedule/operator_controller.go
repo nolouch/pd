@@ -241,10 +241,10 @@ func (oc *OperatorController) PromoteWaitingOperator() {
 			oc.wopStatus.ops[ops[0].Desc()]--
 			continue
 		}
+
 		oc.wopStatus.ops[ops[0].Desc()]--
 		break
 	}
-
 	for _, op := range ops {
 		oc.addOperatorLocked(op)
 	}

@@ -14,6 +14,8 @@
 package schedule
 
 import (
+	"fmt"
+
 	. "github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/pd/server/core"
@@ -27,7 +29,9 @@ func (s *testWaitingOperatorSuite) TestRandBuckets(c *C) {
 	rb := NewRandBuckets()
 	addOperators(rb)
 	for i := 0; i < 3; i++ {
-		c.Assert(rb.GetOperator(), NotNil)
+		op := rb.GetOperator()
+		fmt.Println(op)
+		c.Assert(op, NotNil)
 	}
 	c.Assert(rb.GetOperator(), IsNil)
 }
@@ -47,4 +51,33 @@ func addOperators(wop WaitingOperator) {
 	}...)
 	op.SetPriorityLevel(core.LowPriority)
 	wop.PutOperator(op)
+}
+
+func (s *testWaitingOperatorSuite) TestRandomBucketsWithMergeRegion(c *C) {
+	rb := NewRandBuckets()
+	for j := 0; j < 10000; j++ {
+		fmt.Println(j)
+		// adds operators
+		op := NewOperator("merge-region", uint64(1), &metapb.RegionEpoch{}, OpRegion, []OperatorStep{
+			RemovePeer{FromStore: uint64(1)},
+		}...)
+		rb.PutOperator(op)
+		op = NewOperator("merge-region", uint64(2), &metapb.RegionEpoch{}, OpRegion, []OperatorStep{
+			RemovePeer{FromStore: uint64(2)},
+		}...)
+		rb.PutOperator(op)
+		op = NewOperator("testOperatorLow", uint64(3), &metapb.RegionEpoch{}, OpRegion, []OperatorStep{
+			RemovePeer{FromStore: uint64(3)},
+		}...)
+		op.SetPriorityLevel(core.HighPriority)
+		rb.PutOperator(op)
+
+		for i := 0; i < 2; i++ {
+			op := rb.GetOperator()
+			fmt.Println(op)
+			c.Assert(op, NotNil)
+		}
+		c.Assert(rb.GetOperator(), IsNil)
+
+	}
 }

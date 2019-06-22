@@ -87,9 +87,6 @@ func (b *RandBuckets) GetOperator() []*Operator {
 		}
 		proportion := bucket.weight / b.totalWeight
 		if r >= sum && r < sum+proportion {
-			if len(bucket.ops) == 1 {
-				b.totalWeight -= bucket.weight
-			}
 			var res []*Operator
 			res = append(res, bucket.ops[0])
 			// Merge operation has two operators, and thus it should be handled specifically.
@@ -98,6 +95,9 @@ func (b *RandBuckets) GetOperator() []*Operator {
 				bucket.ops = bucket.ops[2:]
 			} else {
 				bucket.ops = bucket.ops[1:]
+			}
+			if len(bucket.ops) == 0 {
+				b.totalWeight -= bucket.weight
 			}
 			return res
 		}
