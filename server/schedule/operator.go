@@ -507,17 +507,21 @@ func CreateMergeRegionOperator(desc string, cluster Cluster, source *core.Region
 	if err != nil {
 		return nil, err
 	}
-
+	// Fix merge meta not including correct peers.
+	sourceMeta := source.GetMeta()
+	targetMeta := target.GetMeta()
+	sourceMeta.Peers = append(sourceMeta.Peers, source.GetSlavePeers()...)
+	targetMeta.Peers = append(targetMeta.Peers, target.GetSlavePeers()...)
 	steps = append(steps, MergeRegion{
-		FromRegion: source.GetMeta(),
-		ToRegion:   target.GetMeta(),
+		FromRegion: sourceMeta,
+		ToRegion:   targetMeta,
 		IsPassive:  false,
 	})
 
 	op1 := NewOperator(desc, source.GetID(), source.GetRegionEpoch(), kinds|kind|OpMerge, steps...)
 	op2 := NewOperator(desc, target.GetID(), target.GetRegionEpoch(), kinds|kind|OpMerge, MergeRegion{
-		FromRegion: source.GetMeta(),
-		ToRegion:   target.GetMeta(),
+		FromRegion: sourceMeta,
+		ToRegion:   targetMeta,
 		IsPassive:  true,
 	})
 
