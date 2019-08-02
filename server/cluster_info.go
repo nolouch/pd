@@ -498,6 +498,7 @@ func (c *clusterInfo) handleStoreHeartbeat(stats *pdpb.StoreStats) error {
 	c.core.Stores.SetStore(newStore)
 	c.storesStats.Observe(newStore.GetID(), newStore.GetStoreStats())
 	c.storesStats.UpdateTotalBytesRate(c.core.Stores)
+	c.storesStats.UpdateThreadsInfo(newStore.GetStoreStats())
 	return nil
 }
 

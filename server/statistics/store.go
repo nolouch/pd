@@ -23,15 +23,21 @@ import (
 // StoresStats is a cache hold hot regions.
 type StoresStats struct {
 	sync.RWMutex
-	rollingStoresStats map[uint64]*RollingStoreStats
-	bytesReadRate      float64
-	bytesWriteRate     float64
+	rollingStoresStats      map[uint64]*RollingStoreStats
+	bytesReadRate           float64
+	bytesWriteRate          float64
+	totalCPUUsage           map[uint64]uint64
+	totalBytesDiskReadRate  map[uint64]uint64
+	totalBytesDiskWriteRate map[uint64]uint64
 }
 
 // NewStoresStats creates a new hot spot cache.
 func NewStoresStats() *StoresStats {
 	return &StoresStats{
-		rollingStoresStats: make(map[uint64]*RollingStoreStats),
+		rollingStoresStats:      make(map[uint64]*RollingStoreStats),
+		totalCPUUsage:           make(map[uint64]uint64),
+		totalBytesDiskReadRate:  make(map[uint64]uint64),
+		totalBytesDiskWriteRate: make(map[uint64]uint64),
 	}
 }
 
@@ -54,6 +60,49 @@ func (s *StoresStats) GetRollingStoreStats(storeID uint64) *RollingStoreStats {
 	s.RLock()
 	defer s.RUnlock()
 	return s.rollingStoresStats[storeID]
+}
+
+// UpdateThreadsInfo updates the cpu usages and disk rw rates of store.
+func (s *StoresStats) UpdateThreadsInfo(stats *pdpb.StoreStats) {
+	s.RLock()
+	defer s.RUnlock()
+	storeID := stats.GetStoreId()
+
+	cpuUsages := stats.GetCpuUsages()
+	var totalCPUUsage uint64
+	for _, stats := range cpuUsages {
+		totalCPUUsage += GetMean(stats.GetRecords(), stats.GetSize_(), stats.GetCount())
+	}
+	s.totalCPUUsage[storeID] = totalCPUUsage
+
+	readIoRates := stats.GetReadIoRates()
+	var totalBytesDiskReadRate uint64
+	for _, stats := range readIoRates {
+		totalBytesDiskReadRate += GetMean(stats.GetRecords(), stats.GetSize_(), stats.GetCount())
+	}
+	s.totalBytesDiskReadRate[storeID] = totalBytesDiskReadRate
+
+	writeIoRates := stats.GetWriteIoRates()
+	var totalBytesDiskWriteRate uint64
+	for _, stats := range writeIoRates {
+		totalBytesDiskWriteRate += GetMean(stats.GetRecords(), stats.GetSize_(), stats.GetCount())
+	}
+	s.totalBytesDiskWriteRate[storeID] = totalBytesDiskWriteRate
+}
+
+// GetTotalCPUUsage returns the total cpu usages of threads in the store.
+func (s *StoresStats) GetTotalCPUUsage(storeID uint64) uint64 {
+	return s.totalCPUUsage[storeID]
+}
+
+// GetTotalDiskReadRate returns the total read disk io rate of threads in the store.
+func (s *StoresStats) GetTotalDiskReadRate(storeID uint64) uint64 {
+	return s.totalBytesDiskReadRate[storeID]
+}
+
+// GetTotalDiskWriteRate returns the total write disk io rate of threads in the store.
+func (s *StoresStats) GetTotalDiskWriteRate(storeID uint64) uint64 {
+	return s.totalBytesDiskWriteRate[storeID]
 }
 
 // Observe records the current store status with a given store.
