@@ -260,6 +260,10 @@ func (s *Server) campaignLeader() error {
 	if err != nil {
 		return err
 	}
+
+	s.enableLeader()
+	defer s.disableLeader()
+
 	// Try to create raft cluster.
 	err = s.createRaftCluster()
 	if err != nil {
@@ -275,8 +279,6 @@ func (s *Server) campaignLeader() error {
 		physical: zeroTime,
 	})
 
-	s.enableLeader()
-	defer s.disableLeader()
 
 	CheckPDVersion(s.scheduleOpt)
 	log.Info("PD cluster leader is ready to serve", zap.String("leader-name", s.Name()))
