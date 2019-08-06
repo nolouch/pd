@@ -53,3 +53,24 @@ func (r *RollingStats) Median() float64 {
 	median, _ := stats.Median(records)
 	return median
 }
+
+// GetMean returns the mean of the records which have specified window size.
+func GetMean(records []uint64, size uint32, count uint32) uint64 {
+	if count == 0 {
+		return 0
+	}
+	min := uint32(len(records))
+	if size < min {
+		min = size
+	}
+	if count < min {
+		min = count
+	}
+	recordsRef := records[:min]
+
+	var sum uint64
+	for _, n := range recordsRef {
+		sum += n
+	}
+	return sum / uint64(min)
+}

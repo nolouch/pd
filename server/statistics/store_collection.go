@@ -143,6 +143,14 @@ func (s *storeStatistics) Observe(store *core.StoreInfo, stats *StoresStats) {
 	storeWriteRateKeys, storeReadRateKeys := storeFlowStats.GetKeysWriteRate(), storeFlowStats.GetKeysReadRate()
 	storeStatusGauge.WithLabelValues(s.namespace, storeAddress, id, "store_write_rate_keys").Set(float64(storeWriteRateKeys))
 	storeStatusGauge.WithLabelValues(s.namespace, storeAddress, id, "store_read_rate_keys").Set(float64(storeReadRateKeys))
+
+	// Store threads statistics.
+	storeCPUUsages := stats.GetTotalCPUUsage(store.GetID())
+	storeStatusGauge.WithLabelValues(s.namespace, storeAddress, id, "store_cpu_usages").Set(float64(storeCPUUsages))
+	storeDiskReadRates := stats.GetTotalDiskReadRate(store.GetID())
+	storeStatusGauge.WithLabelValues(s.namespace, storeAddress, id, "store_disk_read_rates").Set(float64(storeDiskReadRates))
+	storeDiskWriteRates := stats.GetTotalDiskWriteRate(store.GetID())
+	storeStatusGauge.WithLabelValues(s.namespace, storeAddress, id, "store_disk_write_rates").Set(float64(storeDiskWriteRates))
 }
 
 func (s *storeStatistics) Collect() {

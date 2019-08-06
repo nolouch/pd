@@ -36,3 +36,10 @@ func (t *testRollingStats) TestRollingMedian(c *C) {
 		c.Assert(stats.Median(), Equals, expected[i])
 	}
 }
+
+func (t *testRollingStats) TestMedianAndMean(c *C) {
+	data := []uint64{2, 4, 2, 8, 7, 6, 0}
+
+	mean := GetMean(data, uint32(len(data)), uint32(len(data)))
+	c.Assert(mean, Equals, 4)
+}
