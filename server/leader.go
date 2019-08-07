@@ -389,7 +389,11 @@ func (s *Server) ResignLeader(nextLeader string) error {
 		return errors.New("no valid pd to transfer leader")
 	}
 	nextLeaderID := leaderIDs[rand.Intn(len(leaderIDs))]
-	return s.MoveEtcdLeader(s.serverLoopCtx, s.ID(), nextLeaderID)
+    err = s.MoveEtcdLeader(s.serverLoopCtx, s.ID(), nextLeaderID)
+    if err != nil{
+        return err
+    }
+	return s.deleteLeaderKey()
 }
 
 func (s *Server) deleteLeaderKey() error {
