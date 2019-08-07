@@ -300,6 +300,9 @@ func (s *Server) campaignLeader() error {
 			}
 			etcdLeader := s.GetEtcdLeader()
 			if etcdLeader != s.ID() {
+	            ctx, cancel := context.WithTimeout(s.client.Ctx(), requestTimeout)
+                defer cancel()
+                lessor.Revoke(ctx, leaseResp.ID)
 				log.Info("etcd leader changed, resigns leadership", zap.String("old-leader-name", s.Name()))
 				return nil
 			}
