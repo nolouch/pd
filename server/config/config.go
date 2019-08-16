@@ -53,6 +53,7 @@ type Config struct {
 	DataDir           string `toml:"data-dir" json:"data-dir"`
 	ForceNewCluster   bool   `json:"force-new-cluster"`
 	EnableGRPCGateway bool   `json:"enable-grpc-gateway"`
+	EtcdGRPCMetrics   string `toml:"etcd-grpc-metrics" json:"etcd-grpc-metrics"`
 
 	InitialCluster      string `toml:"initial-cluster" json:"initial-cluster"`
 	InitialClusterState string `toml:"initial-cluster-state" json:"initial-cluster-state"`
@@ -893,6 +894,9 @@ func (c *Config) GenEmbedEtcdConfig() (*embed.Config, error) {
 	cfg.ForceNewCluster = c.ForceNewCluster
 	cfg.ZapLoggerBuilder = embed.NewZapCoreLoggerBuilder(c.logger, c.logger.Core(), c.logProps.Syncer)
 	cfg.EnableGRPCGateway = c.EnableGRPCGateway
+	if len(c.EtcdGRPCMetrics) != 0 {
+		cfg.Metrics = c.EtcdGRPCMetrics
+	}
 	cfg.Logger = "zap"
 	var err error
 
