@@ -513,6 +513,11 @@ func (o *Operator) Desc() string {
 	return o.desc
 }
 
+// Brief returns the operator's short brief.
+func (o *Operator) Brief() string {
+	return o.brief
+}
+
 // SetDesc sets the description for the operator.
 func (o *Operator) SetDesc(desc string) {
 	o.desc = desc
@@ -1035,6 +1040,52 @@ func matchPeerSteps(cluster Cluster, source *core.RegionInfo, target *core.Regio
 	}
 
 	return orderedMoveRegionSteps(cluster, source, targetStores)
+}
+
+// CreateRemoveExtraPeers creates an operator that remove the extra peers.
+func CreateRemoveExtraPeers(desc string, origin *core.RegionInfo, replicas int) (*Operator, *core.RegionInfo) {
+	var steps []OpStep
+	var region *core.RegionInfo
+	totalPeers := 0
+	for _, peer := range origin.GetVoters() {
+		if totalPeers >= replicas && origin.GetLeader().GetId() != peer.GetId() {
+			step := RemovePeer{FromStore: peer.GetStoreId()}
+			steps = append(steps, step)
+			region = origin.Clone(core.WithRemoveStorePeer(peer.GetStoreId()))
+			continue
+		}
+		totalPeers += 1
+	}
+	for _, peer := range origin.GetLearners() {
+		if totalPeers >= replicas {
+			step := RemovePeer{FromStore: peer.GetStoreId()}
+			steps = append(steps, step)
+			region = origin.Clone(core.WithRemoveStorePeer(peer.GetStoreId()))
+			continue
+		}
+		step := PromoteLearner{ToStore: peer.GetStoreId(), PeerID: peer.GetId()}
+		steps = append(steps, step)
+		region = origin.Clone(core.WithPromoteLearner(peer.GetId()))
+		totalPeers += 1
+	}
+	brief := fmt.Sprintf("remove extra peers")
+	op := NewOperator(desc, brief, origin.GetID(), origin.GetRegionEpoch(), OpRegion, steps...)
+	return op, region
+}
+
+func CombineOperator(desc string, brief string, origin *core.RegionInfo, ops ...*Operator) *Operator {
+	var steps []OpStep
+	var kind OpKind
+	for _, op := range ops {
+		if op.RegionEpoch().GetConfVer() != origin.GetRegionEpoch().GetConfVer() || op.RegionEpoch().GetVersion() != origin.GetRegionEpoch().GetVersion() {
+			continue
+		}
+		for _, step := range op.steps {
+			steps = append(steps, step)
+		}
+		kind |= op.Kind()
+	}
+	return NewOperator(desc, brief, origin.GetID(), origin.GetRegionEpoch(), OpRegion, steps...)
 }
 
 // CreateScatterRegionOperator creates an operator that scatters the specified region.

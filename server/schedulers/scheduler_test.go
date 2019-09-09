@@ -14,6 +14,8 @@
 package schedulers
 
 import (
+	"fmt"
+
 	. "github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/pd/pkg/mock/mockcluster"
@@ -180,8 +182,54 @@ func (s *testScatterRegionSuite) TestFiveStores(c *C) {
 	s.scatter(c, 5, 5)
 }
 
+func (s *testScatterRegionSuite) TestFiveStoresWithExtraPeer(c *C) {
+	s.scatterWithExtraPeer(c, 5, 5)
+}
+
 func (s *testScatterRegionSuite) checkOperator(op *operator.Operator, c *C) {
 	c.Assert(operator.CheckOperatorValid(op), IsTrue)
+}
+
+func (s *testScatterRegionSuite) scatterWithExtraPeer(c *C, numStores, numRegions uint64) {
+	opt := mockoption.NewScheduleOptions()
+	tc := mockcluster.NewCluster(opt)
+
+	// Add stores 1~6.
+	for i := uint64(1); i <= numStores; i++ {
+		tc.AddRegionStore(i, 0)
+	}
+
+	// Add regions 1~4.
+	seq := newSequencer(4)
+	// Region 1 has the same distribution with the Region 2, which is used to test selectPeerToReplace.
+	tc.AddLeaderRegion(1, 1, 2, 3, 4)
+	for i := uint64(2); i <= numRegions; i++ {
+		tc.AddLeaderRegion(i, seq.next(), seq.next(), seq.next(), seq.next())
+	}
+
+	scatterer := schedule.NewRegionScatterer(tc, namespace.DefaultClassifier)
+
+	for i := uint64(1); i <= numRegions; i++ {
+		region := tc.GetRegion(i)
+		if op, _ := scatterer.Scatter(region); op != nil {
+			fmt.Println(op, tc.GetRegion(i).GetMeta())
+			//s.checkOperator(op, c)
+			schedule.ApplyOperator(tc, op)
+		}
+	}
+
+	countPeers := make(map[uint64]uint64)
+	for i := uint64(1); i <= numRegions; i++ {
+		region := tc.GetRegion(i)
+		for _, peer := range region.GetPeers() {
+			countPeers[peer.GetStoreId()]++
+		}
+	}
+
+	// Each store should have the same number of peers.
+	for _, count := range countPeers {
+		c.Assert(count, Equals, numRegions*3/numStores)
+	}
 }
 
 func (s *testScatterRegionSuite) scatter(c *C, numStores, numRegions uint64) {
