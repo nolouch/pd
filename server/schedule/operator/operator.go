@@ -1077,6 +1077,9 @@ func CombineOperator(desc string, brief string, origin *core.RegionInfo, ops ...
 	var steps []OpStep
 	var kind OpKind
 	for _, op := range ops {
+		if op == nil {
+			continue
+		}
 		if op.RegionEpoch().GetConfVer() != origin.GetRegionEpoch().GetConfVer() || op.RegionEpoch().GetVersion() != origin.GetRegionEpoch().GetVersion() {
 			continue
 		}

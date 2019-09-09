@@ -202,7 +202,7 @@ func (s *testScatterRegionSuite) scatterWithExtraPeer(c *C, numStores, numRegion
 	// Add regions 1~4.
 	seq := newSequencer(4)
 	// Region 1 has the same distribution with the Region 2, which is used to test selectPeerToReplace.
-	tc.AddLeaderRegion(1, 1, 2, 3, 4)
+	tc.AddLeaderRegion(1, 1, 2, 3)
 	for i := uint64(2); i <= numRegions; i++ {
 		tc.AddLeaderRegion(i, seq.next(), seq.next(), seq.next(), seq.next())
 	}
@@ -212,9 +212,9 @@ func (s *testScatterRegionSuite) scatterWithExtraPeer(c *C, numStores, numRegion
 	for i := uint64(1); i <= numRegions; i++ {
 		region := tc.GetRegion(i)
 		if op, _ := scatterer.Scatter(region); op != nil {
-			fmt.Println(op, tc.GetRegion(i).GetMeta())
 			//s.checkOperator(op, c)
 			schedule.ApplyOperator(tc, op)
+			fmt.Println(op, tc.GetRegion(i).GetMeta())
 		}
 	}
 
