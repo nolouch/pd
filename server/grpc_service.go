@@ -470,12 +470,14 @@ func (s *Server) GetRegionByID(ctx context.Context, request *pdpb.GetRegionByIDR
 		pendingPeers []*metapb.Peer
 	)
 
-	if r != nil {
-		nr := r.Clone(core.WithAddPeers(r.GetSlavePeers()))
-		slaves = r.GetSlavePeers()
-		region = nr.GetMeta()
-		leader = nr.GetLeader()
+	if r == nil {
+		return &pdpb.GetRegionResponse{Header: s.errorRegionNotFound(id)}, nil
 	}
+
+	nr := r.Clone(core.WithAddPeers(r.GetSlavePeers()))
+	slaves = r.GetSlavePeers()
+	region = nr.GetMeta()
+	leader = nr.GetLeader()
 	downPeers = append(downPeers, r.GetDownPeers()...)
 	downPeers = append(downPeers, r.GetSlaveDownPeers()...)
 	pendingPeers = append(pendingPeers, r.GetPendingPeers()...)
@@ -793,6 +795,13 @@ func (s *Server) notBootstrappedHeader() *pdpb.ResponseHeader {
 	return s.errorHeader(&pdpb.Error{
 		Type:    pdpb.ErrorType_NOT_BOOTSTRAPPED,
 		Message: "cluster is not bootstrapped",
+	})
+}
+
+func (s *Server) errorRegionNotFound(id uint64) *pdpb.ResponseHeader {
+	return s.errorHeader(&pdpb.Error{
+		Type:    pdpb.ErrorType_REGION_NOT_FOUND,
+		Message: fmt.Sprintf("region %d is not found", id),
 	})
 }
 
