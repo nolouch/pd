@@ -119,6 +119,10 @@ func (s *labelRegionScheduler) Schedule(cluster opt.Cluster) []*operator.Operato
 		checker := checker.NewReplicaChecker(cluster, nil, s.GetName())
 		filter := filter.StoreStateFilter{ActionScope: labelRegionSchedulerName, MoveRegion: true}
 		storeID, _ := checker.SelectBestReplacementStore(region, oldPeer, filter)
+		if storeID == 0 {
+			schedulerCounter.WithLabelValues(s.GetName(), "no-store").Inc()
+			return nil
+		}
 		newPeer, err := cluster.AllocPeer(storeID)
 		if err != nil {
 			schedulerCounter.WithLabelValues(s.GetName(), "no-peer").Inc()
