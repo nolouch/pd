@@ -128,7 +128,7 @@ func (s *labelRegionScheduler) Schedule(cluster opt.Cluster) []*operator.Operato
 			schedulerCounter.WithLabelValues(s.GetName(), "no-peer").Inc()
 			return nil
 		}
-		op, err := operator.CreateMovePeerOperator("balance-region", cluster, region, operator.OpBalance, oldPeer.GetStoreId(), newPeer.GetStoreId(), newPeer.GetId())
+		op, err := operator.CreateMovePeerOperator("reject-region", cluster, region, operator.OpBalance, oldPeer.GetStoreId(), newPeer.GetStoreId(), newPeer.GetId())
 		if err != nil {
 			schedulerCounter.WithLabelValues(s.GetName(), "create-operator-fail").Inc()
 			return nil

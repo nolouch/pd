@@ -409,7 +409,8 @@ func (f StoreStateFilter) Target(opts opt.Options, store *core.StoreInfo) bool {
 		(store.IsDisconnected() ||
 			store.IsBlocked() ||
 			store.GetIsBusy() ||
-			opts.CheckLabelProperty(opt.RejectLeader, store.GetLabels())) {
+			opts.CheckLabelProperty(opt.RejectLeader, store.GetLabels()) ||
+			opts.CheckLabelProperty(opt.RejectRegion, store.GetLabels())) {
 		return true
 	}
 
