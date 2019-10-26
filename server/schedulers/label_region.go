@@ -134,7 +134,7 @@ func (s *labelRegionScheduler) Schedule(cluster opt.Cluster) []*operator.Operato
 			return nil
 
 		}
-		schedulerCounter.WithLabelValues(s.GetName(), "skip").Inc()
+		schedulerCounter.WithLabelValues(s.GetName(), "new-operator").Inc()
 		return []*operator.Operator{op}
 	}
 
