@@ -233,6 +233,7 @@ func (c *coordinator) run() {
 			continue
 		}
 
+		log.Info("debug create scheduler", zap.String("scheduler-type", schedulerCfg.Type))
 		s, err := schedule.CreateScheduler(schedulerCfg.Type, c.opController, c.cluster.storage, schedule.ConfigSliceDecoder(schedulerCfg.Type, schedulerCfg.Args))
 		if err != nil {
 			log.Error("can not create scheduler", zap.String("scheduler-type", schedulerCfg.Type), zap.Error(err))

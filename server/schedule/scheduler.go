@@ -15,6 +15,7 @@ package schedule
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -118,6 +119,7 @@ func CreateScheduler(typ string, opController *OperatorController, storage *core
 		return nil, err
 	}
 	data, err := s.EncodeConfig()
+	fmt.Println("Debug", typ, s.GetName())
 	if err != nil {
 		return nil, err
 	}

@@ -33,7 +33,7 @@ func init() {
 	})
 
 	schedule.RegisterScheduler("reject-region", func(opController *schedule.OperatorController, storage *core.Storage, decoder schedule.ConfigDecoder) (schedule.Scheduler, error) {
-		return newLabelScheduler(opController), nil
+		return newRegionLabelScheduler(opController), nil
 	})
 }
 
