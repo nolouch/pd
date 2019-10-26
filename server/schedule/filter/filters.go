@@ -414,6 +414,9 @@ func (f StoreStateFilter) Target(opts opt.Options, store *core.StoreInfo) bool {
 	}
 
 	if f.MoveRegion {
+		if opts.CheckLabelProperty(opt.RejectRegion, store.GetLabels()) {
+			return true
+		}
 		// only target consider the pending peers because pending more means the disk is slower.
 		if opts.GetMaxPendingPeerCount() > 0 && store.GetPendingPeerCount() > int(opts.GetMaxPendingPeerCount()) {
 			return true

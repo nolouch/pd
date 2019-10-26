@@ -66,6 +66,9 @@ const (
 	// RejectLeader is the label property type that suggests a store should not
 	// have any region leaders.
 	RejectLeader = "reject-leader"
+	// RejectReigon is the label property type that suggests a store should not
+	// have any region.
+	RejectRegion = "reject-region"
 )
 
 // Cluster provides an overview of a cluster's regions distribution.
