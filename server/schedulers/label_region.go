@@ -26,18 +26,18 @@ import (
 )
 
 func init() {
-	schedule.RegisterSliceDecoderBuilder("label-region", func(args []string) schedule.ConfigDecoder {
+	schedule.RegisterSliceDecoderBuilder("reject-region", func(args []string) schedule.ConfigDecoder {
 		return func(v interface{}) error {
 			return nil
 		}
 	})
 
-	schedule.RegisterScheduler("label-region", func(opController *schedule.OperatorController, storage *core.Storage, decoder schedule.ConfigDecoder) (schedule.Scheduler, error) {
+	schedule.RegisterScheduler("reject-region", func(opController *schedule.OperatorController, storage *core.Storage, decoder schedule.ConfigDecoder) (schedule.Scheduler, error) {
 		return newLabelScheduler(opController), nil
 	})
 }
 
-const labelRegionSchedulerName = "label-region-scheduler"
+const labelRegionSchedulerName = "reject-region-scheduler"
 
 type labelRegionScheduler struct {
 	name string
@@ -65,7 +65,7 @@ func (s *labelRegionScheduler) GetName() string {
 }
 
 func (s *labelRegionScheduler) GetType() string {
-	return "label-region"
+	return "reject-region"
 }
 
 func (s *labelRegionScheduler) IsScheduleAllowed(cluster opt.Cluster) bool {
