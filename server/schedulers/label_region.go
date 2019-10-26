@@ -65,7 +65,7 @@ func (s *labelRegionScheduler) GetName() string {
 }
 
 func (s *labelRegionScheduler) GetType() string {
-	return "label"
+	return "label-region"
 }
 
 func (s *labelRegionScheduler) IsScheduleAllowed(cluster opt.Cluster) bool {
