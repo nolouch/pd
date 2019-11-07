@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package matrix
 
 import (
@@ -52,7 +65,6 @@ func (v *valueUint64) Equal(other Value) bool {
 	return *v == *another
 }
 
-// 打印DiscreteAxis
 func SprintDiscreteAxis(axis *DiscreteAxis) string {
 	str := fmt.Sprintf("StartKey: %v\n", axis.StartKey)
 	for _, line := range axis.Lines {
@@ -81,7 +93,6 @@ func TestClone(t *testing.T) {
 	endTime := time.Now()
 	axis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
 	axisClone := axis.Clone()
-	//克隆的数据是否相等
 	if !reflect.DeepEqual(axisClone, axis) {
 		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(axisClone), SprintDiscreteAxis(axis))
 	}
@@ -89,7 +100,6 @@ func TestClone(t *testing.T) {
 	bigUint64 := uint64(100000)
 	expectUint64 := axis.Lines[0].GetThreshold()
 	axisClone.Lines[0].Merge(&valueUint64{bigUint64})
-	//修改后不能改变原来的数据
 	if reflect.DeepEqual(axis, axisClone) {
 		t.Fatalf("expect %v, but got %v", expectUint64, bigUint64)
 	}
@@ -122,7 +132,7 @@ func TestDeNoise(t *testing.T) {
 	endTime := time.Now()
 	axis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
 
-	//第一遍测试
+	// first time.
 	threshold1 := uint64(3)
 	expectUint64List1 := []uint64{4, 0, 10, 2, 3, 0, 7, 11, 2}
 	expectEndKeyList1 := []string{"a", "b", "d", "e", "i", "k", "l", "t", "z"}
@@ -134,7 +144,7 @@ func TestDeNoise(t *testing.T) {
 
 	/**********************************************************/
 	newAxis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
-	//第二遍测试
+	// second test.
 	threshold2 := uint64(12)
 	expectUint64List2 := []uint64{11}
 	expectEndKeyList2 := []string{"z"}
@@ -176,18 +186,14 @@ func TestDeProjection(t *testing.T) {
 	startKey := "\n"
 	uint64List := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
 	endKeyList := []string{"b", "c", "d", "h", "i", "m", "q", "t", "x", "z"}
-	//uint64List := []uint64 {       1,   5,   5,   6,   6,  10,   7,   6,   0,   9, }
-	//endKeyList := []string {"b", "c", "e", "f", "h", "i", "k", "l", "m", "o", }
 	endTime := time.Now()
 	axis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
 
 	desStartKey := ""
 	desKeyList := []string{"a", "c", "d", "d", "f", "g", "m", "z"}
-	//desKeyList := []string {"h", "i", "k", "l", "m", "n", "o", "r",}
 	desUint64List := []uint64{0, 0, 0, 0, 0, 0, 0, 0}
 
 	expectUint64List := []uint64{0, 0, 10, 10, 2, 2, 4, 11}
-	//expectUint64List := []uint64 {      6,  10,   7,   6,   0,   9,   9,   0,}
 	desAxis := BuildDiscreteAxis(desStartKey, desKeyList, desUint64List, endTime)
 	expectAxis := BuildDiscreteAxis(desStartKey, desKeyList, expectUint64List, endTime)
 
@@ -210,7 +216,7 @@ func TestGetDiscreteKeys(t *testing.T) {
 		t.Fatalf("expect %v, but got %v", expectKeys, keys)
 	}
 
-	//测试DiscreteAxis中Lines为空的情况
+	// lines is empty
 	axis.Lines = []*Line{}
 	expectKeys = DiscreteKeys{""}
 	keys = axis.GetDiscreteKeys()
