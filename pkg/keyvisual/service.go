@@ -38,15 +38,23 @@ type KeyvisualService struct {
 	stats *Stat
 }
 
-var defaultLayersConfig = LayersConfig{
-	{Len: 60 * 12, Ratio: 10},
-	{Len: 60 / 10 * 24 * 3, Ratio: 6},
-	{Len: 24 * 15, Ratio: 24},
-	{Len: 0, Ratio: 0},
-}
+var (
+	defaultLayersConfig = LayersConfig{
+		{Len: 60 * 12, Ratio: 10},
+		{Len: 60 / 10 * 24 * 3, Ratio: 6},
+		{Len: 24 * 15, Ratio: 24},
+		{Len: 0, Ratio: 0},
+	}
+
+	defaultRegisterAPIGroupInfo = server.APIGroupInfo{
+		IsCore:  false,
+		Group:   "keyvisual",
+		Version: "v1",
+	}
+)
 
 // RegisterKeyvisualService register the service to pd.
-func RegisterKeyvisualService(svr *server.Server) *KeyvisualService {
+func RegisterKeyvisualService(svr *server.Server) (http.Handler, server.APIGroupInfo) {
 	ctx := context.TODO()
 	mux := http.NewServeMux()
 	stats := NewStat(defaultLayersConfig)
@@ -56,8 +64,9 @@ func RegisterKeyvisualService(svr *server.Server) *KeyvisualService {
 		svr:      svr,
 		stats:    stats,
 	}
-	k.HandleFunc("/heatmaps", k.Heatmap)
-	return k
+	k.HandleFunc("/pd/apis/keyvisual/v1/heatmaps", k.Heatmap)
+	k.Run()
+	return k, defaultRegisterAPIGroupInfo
 }
 
 func (s *KeyvisualService) Run() {
@@ -105,7 +114,7 @@ func (s *KeyvisualService) updateStat(ctx context.Context) {
 			if cluster == nil {
 				continue
 			}
-			regions := cluster.GetRegions()
+			regions := scanRegions(cluster)
 			s.stats.Append(regions)
 		}
 	}

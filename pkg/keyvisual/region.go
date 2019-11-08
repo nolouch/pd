@@ -14,42 +14,25 @@
 package keyvisual
 
 import (
-	"encoding/hex"
-	"fmt"
+	"github.com/pingcap/pd/server"
+	"github.com/pingcap/pd/server/core"
 )
 
-type regionInfo struct {
-	ID           uint64 `json:"id"`
-	StartKey     string `json:"start_key"`
-	EndKey       string `json:"end_key"`
-	WrittenBytes uint64 `json:"written_bytes,omitempty"`
-	ReadBytes    uint64 `json:"read_bytes,omitempty"`
-	WrittenKeys  uint64 `json:"written_keys,omitempty"`
-	ReadKeys     uint64 `json:"read_keys,omitempty"`
-}
-
-func (r *regionInfo) String() string {
-	return fmt.Sprintf("[%s, %s)", r.StartKey, r.EndKey)
-}
-
-func scanRegions() []*regionInfo {
+func scanRegions(cluster *server.RaftCluster) []*core.RegionInfo {
 	var key []byte
-	var err error
-	regions := make([]*regionInfo, 0, 1024)
+	regions := make([]*core.RegionInfo, 0, 1024)
 	for {
-		info := regionRequest(key, 1024)
-		length := len(info.Regions)
+		rs := cluster.ScanRegions(key, []byte(""), 1024)
+		length := len(rs)
 		if length == 0 {
 			break
 		}
-		regions = append(regions, info.Regions...)
+		regions = append(regions, rs...)
 
-		lastEndKey := info.Regions[length-1].EndKey
-		if lastEndKey == "" {
+		key = rs[length-1].GetEndKey()
+		if len(key) == 0 {
 			break
 		}
-		key, err = hex.DecodeString(lastEndKey)
-		perr(err)
 	}
 	return regions
 }

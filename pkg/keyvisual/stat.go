@@ -303,6 +303,8 @@ func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey stri
 			rangeTimePlane.Axes[i] = tempAxis.Range(startKey, endKey)
 		}
 	}
-	newMatrix := rangeTimePlane.Pixel(50, 120)
-	return RangeTableID(newMatrix)
+	newMatrix := rangeTimePlane.Pixel(120, 100)
+	return newMatrix
+	// Fixme: use tidb
+	//return RangeTableID(newMatrix)
 }

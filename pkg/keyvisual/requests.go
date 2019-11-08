@@ -18,12 +18,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 )
-
-type regionsInfo struct {
-	Regions []*regionInfo `json:"regions"`
-}
 
 type dbInfo struct {
 	Name struct {
@@ -57,13 +52,6 @@ func request(addr string, uri string, v interface{}) {
 	perr(err)
 	err = json.Unmarshal([]byte(r), v)
 	perr(err)
-}
-
-func regionRequest(key []byte, limit uint64) regionsInfo {
-	uri := fmt.Sprintf("pd/api/v1/regions/key?key=%s&limit=%d", url.QueryEscape(string(key)), limit)
-	var info regionsInfo
-	request(*pdAddr, uri, &info)
-	return info
 }
 
 func dbRequest(limit uint64) []*dbInfo {
