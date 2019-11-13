@@ -79,6 +79,7 @@ func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
 	endKey := r.FormValue("endkey")
 	start := r.FormValue("starttime")
 	end := r.FormValue("endtime")
+	typ := r.FormValue("type")
 	endTime := time.Now()
 	startTime := endTime.Add(-60 * time.Minute)
 
@@ -96,7 +97,7 @@ func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
 	if endKey == "" {
 		endKey = "~" //\126
 	}
-	matrix := s.stats.RangeMatrix(startTime, endTime, startKey, endKey)
+	matrix := s.stats.RangeMatrix(startTime, endTime, startKey, endKey, typ)
 	data, _ := json.Marshal(matrix)
 	_, err := w.Write(data)
 	perr(err)

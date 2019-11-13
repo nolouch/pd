@@ -32,10 +32,10 @@ type Label struct {
 }
 
 type Matrix struct {
-	Data   [][]Value     `json:"data"`   // data of the matrix
-	Keys   DiscreteKeys  `json:"keys"`   // key-axes
-	Times  DiscreteTimes `json:"times"`  // time-axes
-	Labels []*Label      `json:"labels"` // the label information
+	Data   [][]interface{} `json:"data"`   // data of the matrix
+	Keys   DiscreteKeys    `json:"keys"`   // key-axes
+	Times  DiscreteTimes   `json:"times"`  // time-axes
+	Labels []*Label        `json:"labels"` // the label information
 }
 
 // GetDiscreteTimes gets all times.
@@ -108,7 +108,7 @@ func (plane *DiscretePlane) Compact() (axis *DiscreteAxis, startTime time.Time) 
 }
 
 // Pixel generates the Matrix[n,m].
-func (plane *DiscretePlane) Pixel(n int, m int) *Matrix {
+func (plane *DiscretePlane) Pixel(n int, m int, typ string) *Matrix {
 	newPlane := DiscretePlane{
 		StartTime: plane.StartTime,
 	}
@@ -209,15 +209,15 @@ func (plane *DiscretePlane) Pixel(n int, m int) *Matrix {
 	timesLen := len(discreteTimes) - 1
 	keysLen := len(discreteKeys) - 1
 	matrix := &Matrix{
-		Data:  make([][]Value, timesLen),
+		Data:  make([][]interface{}, timesLen),
 		Keys:  discreteKeys,
 		Times: discreteTimes,
 	}
 
 	for i := 0; i < timesLen; i++ {
-		matrix.Data[i] = make([]Value, keysLen)
+		matrix.Data[i] = make([]interface{}, keysLen)
 		for j := 0; j < keysLen; j++ {
-			matrix.Data[i][j] = newPlane.Axes[i].Lines[j].Value
+			matrix.Data[i][j] = newPlane.Axes[i].Lines[j].Value.GetValue(typ)
 		}
 	}
 	return matrix

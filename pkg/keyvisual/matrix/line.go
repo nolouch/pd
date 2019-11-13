@@ -18,6 +18,7 @@ type Value interface {
 	Merge(other Value)
 	Less(threshold uint64) bool
 	GetThreshold() uint64
+	GetValue(typ string) interface{}
 	Clone() Value
 	Reset()
 	Default() Value

@@ -63,6 +63,23 @@ func (v *statUnit) Split(count int) matrix.Value {
 	return &res
 }
 
+func (v *statUnit) GetValue(typ string) interface{} {
+	if typ == "" {
+		return v
+	}
+	switch typ {
+	case "write_bytes":
+		return v.Average.WrittenBytes
+	case "read_bytes":
+		return v.Average.ReadBytes
+	case "write_keys":
+		return v.Average.WrittenBytes
+	case "read_keys":
+		return v.Average.ReadKeys
+	}
+	return v
+}
+
 func (v *statUnit) Merge(other matrix.Value) {
 	v2 := other.(*statUnit)
 	v.Max.WrittenBytes = max(v.Max.WrittenBytes, v2.Max.WrittenBytes)
@@ -290,7 +307,7 @@ func newDiscreteAxis(regions []*core.RegionInfo) *matrix.DiscreteAxis {
 	return axis
 }
 
-func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey string, endKey string) *matrix.Matrix {
+func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey string, endKey string, typ string) *matrix.Matrix {
 	s.RLock()
 	rangeTimePlane := s.layers[0].Range(startTime, endTime)
 	s.RUnlock()
@@ -303,7 +320,7 @@ func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey stri
 			rangeTimePlane.Axes[i] = tempAxis.Range(startKey, endKey)
 		}
 	}
-	newMatrix := rangeTimePlane.Pixel(120, 100)
+	newMatrix := rangeTimePlane.Pixel(120, 100, typ)
 	return newMatrix
 	// Fixme: use tidb
 	//return RangeTableID(newMatrix)
