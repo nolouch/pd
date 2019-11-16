@@ -14,6 +14,10 @@
 package matrix
 
 import (
+	"encoding/hex"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 	"sort"
 	"time"
 )
@@ -25,17 +29,16 @@ type DiscretePlane struct {
 
 type DiscreteTimes []time.Time
 
-type Label struct {
-	StartKey string    `json:"start_key"`
-	EndKey   string    `json:"end_key"`
-	Names    []*string `json:"labels"`
+// LabelKey labels the key.
+type LabelKey struct {
+	Key    string   `json:"key"`
+	Labels []string `json:"labels"`
 }
 
 type Matrix struct {
-	Data   [][]interface{} `json:"data"`   // data of the matrix
-	Keys   DiscreteKeys    `json:"keys"`   // key-axes
-	Times  DiscreteTimes   `json:"times"`  // time-axes
-	Labels []*Label        `json:"labels"` // the label information
+	Data  [][]interface{} `json:"values"`   // data of the matrix
+	Keys  []LabelKey      `json:"keyAxis"`  // key-axes
+	Times []int64         `json:"timeAxis"` // time-axes
 }
 
 // GetDiscreteTimes gets all times.
@@ -64,14 +67,18 @@ func (plane *DiscretePlane) Compact() (axis *DiscreteAxis, startTime time.Time) 
 		if len(d.Lines) == 0 {
 			continue
 		}
-		for _, k := range d.GetDiscreteKeys() {
+		for i, k := range d.GetDiscreteKeys() {
 			if _, ok := isInside[k]; !ok {
 				isInside[k] = struct{}{}
 				allKeys = append(allKeys, k)
 			}
+			if i > 0 && k == "" {
+				isInside["EmptyEndKey_xmaigic"] = struct{}{}
+			}
 		}
 	}
 	sort.Strings(allKeys)
+	log.Info("allKeys", zap.Int("key-len", len(allKeys)))
 
 	// Fixme: default value.
 	var defaultValue Value
@@ -89,6 +96,9 @@ func (plane *DiscretePlane) Compact() (axis *DiscreteAxis, startTime time.Time) 
 		axis.StartKey = ""
 	} else {
 		axis.StartKey = allKeys[0]
+	}
+	if _, ok := isInside["EmptyEndKey_xmaigic"]; ok {
+		allKeys = append(allKeys, "")
 	}
 	length = len(allKeys)
 	if length > 0 {
@@ -117,7 +127,6 @@ func (plane *DiscretePlane) Pixel(n int, m int, typ string) *Matrix {
 	}
 	// time-axis, avg compress
 	if len(plane.Axes) >= n {
-
 		// the first part use step1, then step2
 		step2 := len(plane.Axes) / n
 		step1 := step2 + 1
@@ -160,12 +169,15 @@ func (plane *DiscretePlane) Pixel(n int, m int, typ string) *Matrix {
 	// then all axes can do project to the base-axis
 	axis, _ := newPlane.Compact()
 	if len(axis.Lines) > m {
+		log.Info("the keys is more than threshold",
+			zap.Int("threshold", m),
+			zap.Int("lines", len(axis.Lines)))
 		// get all thresholds, then fine a threshold to compress
 		thresholdSet := make(map[uint64]struct{}, len(axis.Lines))
 		for _, line := range axis.Lines {
-			thresholdSet[line.GetThreshold()] = struct{}{}
+			thresholdSet[line.GetValue(typ)] = struct{}{}
 		}
-
+		thresholdSet[0] = struct{}{}
 		thresholds := make([]uint64, 0, len(thresholdSet))
 		for threshold := range thresholdSet {
 			thresholds = append(thresholds, threshold)
@@ -173,29 +185,38 @@ func (plane *DiscretePlane) Pixel(n int, m int, typ string) *Matrix {
 		sort.Slice(thresholds, func(i, j int) bool { return thresholds[i] < thresholds[j] })
 
 		i := sort.Search(len(thresholds), func(i int) bool {
-			return axis.Effect(thresholds[i]) <= uint(m)
+			return axis.Effect(thresholds[i], typ) <= uint(m)
 		})
 
 		// find a better threshold
+		if i >= len(thresholds) {
+			i = i - 1
+		}
 		threshold1 := thresholds[i]
-		num1 := axis.Effect(threshold1)
-		if i > 0 && num1 != uint(m) {
+		num1 := axis.Effect(threshold1, typ)
+		//	for z := range thresholds {
+		//		log.S().Info("eeffee:", z, axis.Effect(thresholds[z], typ), thresholds[z])
+		//	}
+		if i > 0 && num1 != uint(m) && num1 > uint(m) {
 			threshold2 := thresholds[i-1]
-			num2 := axis.Effect(threshold2)
+			num2 := axis.Effect(threshold2, typ)
 			if (int(num2) - m) < (m - int(num1)) {
-				axis.DeNoise(threshold2)
+				axis.DeNoise2(threshold2, m, typ)
 			} else {
-				axis.DeNoise(threshold1)
+				axis.DeNoise2(threshold1, m, typ)
 			}
 		} else {
-			axis.DeNoise(threshold1)
+			axis.DeNoise2(threshold1, m, typ)
 		}
 	}
+	//log.Info("axis", zap.Reflect("lines", axis.Lines))
 
 	// reset the value then do projection.
 	for i := 0; i < len(axis.Lines); i++ {
 		axis.Lines[i].Reset()
 	}
+
+	log.Info("the new  keys number", zap.Int("keys-number", len(axis.Lines)))
 	for i := 0; i < len(newPlane.Axes); i++ {
 		axisClone := axis.Clone()
 		newPlane.Axes[i].DeProjection(axisClone)
@@ -210,8 +231,8 @@ func (plane *DiscretePlane) Pixel(n int, m int, typ string) *Matrix {
 	keysLen := len(discreteKeys) - 1
 	matrix := &Matrix{
 		Data:  make([][]interface{}, timesLen),
-		Keys:  discreteKeys,
-		Times: discreteTimes,
+		Keys:  collectLabelKeys(discreteKeys),
+		Times: collectUnixTimes(discreteTimes),
 	}
 
 	for i := 0; i < timesLen; i++ {
@@ -221,4 +242,24 @@ func (plane *DiscretePlane) Pixel(n int, m int, typ string) *Matrix {
 		}
 	}
 	return matrix
+}
+
+func collectLabelKeys(keys DiscreteKeys) []LabelKey {
+	newKeys := make([]LabelKey, len(keys))
+	for i, key := range keys {
+		// TODO: Parse from label
+		newKeys[i] = LabelKey{
+			Key:    hex.EncodeToString([]byte(key)),
+			Labels: []string{},
+		}
+	}
+	return newKeys
+}
+
+func collectUnixTimes(times DiscreteTimes) []int64 {
+	res := make([]int64, len(times))
+	for i, t := range times {
+		res[i] = t.Unix()
+	}
+	return res
 }

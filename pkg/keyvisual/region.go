@@ -14,8 +14,10 @@
 package keyvisual
 
 import (
+	"github.com/pingcap/log"
 	"github.com/pingcap/pd/server"
 	"github.com/pingcap/pd/server/core"
+	"go.uber.org/zap"
 )
 
 func scanRegions(cluster *server.RaftCluster) []*core.RegionInfo {
@@ -34,5 +36,7 @@ func scanRegions(cluster *server.RaftCluster) []*core.RegionInfo {
 			break
 		}
 	}
+
+	log.Info("Update keyvisual regions", zap.Int("total-length", len(regions)))
 	return regions
 }

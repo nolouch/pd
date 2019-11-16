@@ -17,8 +17,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/pd/pkg/keyvisual/matrix"
 	"github.com/pingcap/pd/server/core"
+	"go.uber.org/zap"
 )
 
 type regionValue struct {
@@ -63,10 +65,8 @@ func (v *statUnit) Split(count int) matrix.Value {
 	return &res
 }
 
-func (v *statUnit) GetValue(typ string) interface{} {
-	if typ == "" {
-		return v
-	}
+func (v *statUnit) GetValue(typ string) uint64 {
+
 	switch typ {
 	case "write_bytes":
 		return v.Average.WrittenBytes
@@ -77,7 +77,7 @@ func (v *statUnit) GetValue(typ string) interface{} {
 	case "read_keys":
 		return v.Average.ReadKeys
 	}
-	return v
+	return v.Average.WrittenBytes
 }
 
 func (v *statUnit) Merge(other matrix.Value) {
@@ -92,11 +92,14 @@ func (v *statUnit) Merge(other matrix.Value) {
 	v.Average.ReadKeys = v.Average.ReadKeys + v2.Average.ReadKeys
 }
 
-func (v *statUnit) Less(threshold uint64) bool {
-	return max(v.Max.ReadBytes, v.Max.WrittenBytes) < threshold
+func (v *statUnit) Less(threshold uint64, typ string) bool {
+	if typ == "" {
+		return max(v.Max.ReadBytes, v.Max.WrittenBytes) < threshold
+	}
+	return v.GetValue(typ) < threshold
 }
 
-func (v *statUnit) GetThreshold() uint64 {
+func (v *statUnit) GetThreshold(typ string) uint64 {
 	return max(v.Max.ReadBytes, v.Max.WrittenBytes)
 }
 
@@ -167,6 +170,7 @@ func (s *layerStat) Append(axis *matrix.DiscreteAxis) {
 	}
 
 	if s.head == s.tail && !s.empty {
+		log.S().Info(s.head, s.tail)
 		// compress data
 		plane := new(matrix.DiscretePlane)
 		plane.StartTime = s.startTime
@@ -297,13 +301,16 @@ func newDiscreteAxis(regions []*core.RegionInfo) *matrix.DiscreteAxis {
 		EndTime:  time.Now(),
 	}
 	for _, info := range regions {
+		if len(info.GetEndKey()) == 0 {
+		}
 		line := &matrix.Line{
 			EndKey: string(info.GetEndKey()),
 			Value:  newStatUnit(info),
 		}
 		axis.Lines = append(axis.Lines, line)
 	}
-	axis.DeNoise(1)
+	// Fix me:
+	//	axis.DeNoise(1)
 	return axis
 }
 
@@ -320,7 +327,8 @@ func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey stri
 			rangeTimePlane.Axes[i] = tempAxis.Range(startKey, endKey)
 		}
 	}
-	newMatrix := rangeTimePlane.Pixel(120, 100, typ)
+	log.Info("got range tiem plane", zap.Int("total-time-length", len(rangeTimePlane.Axes)))
+	newMatrix := rangeTimePlane.Pixel(1000, 1000, typ)
 	return newMatrix
 	// Fixme: use tidb
 	//return RangeTableID(newMatrix)

@@ -14,12 +14,18 @@
 package keyvisual
 
 import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/pd/pkg/keyvisual/matrix"
+	"github.com/pingcap/pd/server/api"
 	"github.com/pingcap/pd/server/core"
 )
 
@@ -99,7 +105,6 @@ func (t *testStats) TestStatAppend(c *C) {
 			break
 		}
 		check(axis, newDiscreteAxis(regions[i]))
-
 	}
 
 	// insert 15 more
@@ -247,8 +252,8 @@ func (s *testStats) TestStatUnitLess(c *C) {
 	check := func(src bool, dst bool) {
 		c.Assert(src, Equals, dst)
 	}
-	check(src.Less(threshold), true)
-	check(src2.Less(threshold), false)
+	check(src.Less(threshold, "write_key"), true)
+	check(src2.Less(threshold, "write_key"), false)
 }
 
 func (s *testStats) TestStatUnitGetThreshold(c *C) {
@@ -280,7 +285,7 @@ func (s *testStats) TestStatUnitGetThreshold(c *C) {
 	}
 	var threshold uint64
 	for _, s := range src {
-		threshold = s.GetThreshold()
+		threshold = s.GetValue("")
 	}
 	c.Assert(threshold, Equals, 50)
 }
@@ -369,4 +374,94 @@ func (s *testStats) TestLayerStatSearch(c *C) {
 	c.Assert(2, Equals, find)
 	find, _ = l.Search(endTime.Add(-2 * time.Minute))
 	c.Assert(2, Equals, find)
+}
+
+func (s *testStats) TestAppend(c *C) {
+	testStat := NewStat(debugLayersConfig)
+	// Open our jsonFile
+	jsonFile, err := os.Open("./data_test/region.txt")
+	// if we os.Open returns an error then handle it
+	c.Assert(err, IsNil)
+	defer jsonFile.Close()
+	byteValue, err := ioutil.ReadAll(jsonFile)
+	c.Assert(err, IsNil)
+	res := make([]api.RegionInfo, 0, 1024)
+	json.Unmarshal(byteValue, &res)
+	// testStat := NewStat(debugLayersConfig)
+	// testStat.Append(regions)
+	//fmt.Printf("%#v\n", res[100])
+	regions := make([]*core.RegionInfo, len(res))
+	for i, r := range res {
+		regions[i] = toCoreRegion(r)
+	}
+	//axis := newDiscreteAxis(regions)
+	//axis.DeNoise(1)
+	//d, _ := json.Marshal(axis)
+	//fmt.Println(string(d))
+	//fmt.Println(len(axis.Lines), len(regions))
+	testStat.Append(regions)
+	testStat.Append(regions)
+	et := time.Now()
+	st := et.Add(-60 * time.Minute)
+	matrix := testStat.RangeMatrix(st, et, "", "", "read_bytes")
+	d, _ := json.Marshal(matrix)
+	fmt.Println(string(d), len(matrix.Data), len(matrix.Data[0]))
+}
+
+func (s *testStats) TestJson(c *C) {
+	data := `
+        {
+        "id": 2,
+        "start_key": "7480000000000000FF3C5F728000000000FF10EA720000000000FA",
+        "end_key": "",
+        "epoch": {
+            "conf_ver": 104,
+            "version": 3027
+        },
+        "peers": [
+            {
+                "id": 42988,
+                "store_id": 1
+            },
+            {
+                "id": 44771,
+                "store_id": 5
+            },
+            {
+                "id": 44835,
+                "store_id": 4
+            }
+        ],
+        "leader": {
+            "id": 42988,
+            "store_id": 1
+        },
+        "approximate_size": 56,
+        "approximate_keys": 243478
+    }`
+	var region api.RegionInfo
+	json.Unmarshal([]byte(data), &region)
+	fmt.Println(toCoreRegion(region))
+}
+
+func toCoreRegion(aRegion api.RegionInfo) *core.RegionInfo {
+	startKey, _ := hex.DecodeString(aRegion.StartKey)
+	endKey, _ := hex.DecodeString(aRegion.EndKey)
+	meta := &metapb.Region{
+		Id:          aRegion.ID,
+		StartKey:    startKey,
+		EndKey:      endKey,
+		RegionEpoch: aRegion.RegionEpoch,
+		Peers:       aRegion.Peers,
+	}
+	return core.NewRegionInfo(meta, aRegion.Leader,
+		core.SetApproximateKeys(aRegion.ApproximateKeys),
+		core.SetApproximateSize(aRegion.ApproximateSize),
+		core.WithPendingPeers(aRegion.PendingPeers),
+		core.WithDownPeers(aRegion.DownPeers),
+		core.SetWrittenBytes(aRegion.WrittenBytes),
+		core.SetWrittenKeys(aRegion.WrittenKeys),
+		core.SetReadBytes(aRegion.ReadBytes),
+		core.SetReadKeys(aRegion.ReadKeys),
+	)
 }

@@ -174,7 +174,7 @@ func TestPixel(t *testing.T) {
 
 	n := 2
 	m := 7
-	matrix := plane.Pixel(n, m)
+	matrix := plane.Pixel(n, m, typ)
 	if !reflect.DeepEqual(expectMatrix, matrix) {
 		t.Fatalf("expect: %v\nbut got: %v", SprintMatrix(expectMatrix), SprintMatrix(matrix))
 	}

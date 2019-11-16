@@ -18,9 +18,12 @@ import (
 	"encoding/json"
 	"flag"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/pd/server"
+	"go.uber.org/zap"
 )
 
 var (
@@ -75,28 +78,36 @@ func (s *KeyvisualService) Run() {
 
 func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
-	startKey := r.FormValue("startkey")
-	endKey := r.FormValue("endkey")
-	start := r.FormValue("starttime")
-	end := r.FormValue("endtime")
-	typ := r.FormValue("type")
+	form := r.URL.Query()
+	startKey := form.Get("startkey")
+	endKey := form.Get("endkey")
+	startTimeString := form.Get("starttime")
+	endTimeString := form.Get("endtime")
+	typ := form.Get("type")
 	endTime := time.Now()
 	startTime := endTime.Add(-60 * time.Minute)
 
-	if start != "" {
-		if d, err := time.ParseDuration(start); err == nil {
-			startTime = endTime.Add(d)
+	if startTimeString != "" {
+		tsSec, err := strconv.ParseInt(startTimeString, 10, 64)
+		if err != nil {
+			log.Error("parse ts failed", zap.Error(err))
 		}
+		startTime = time.Unix(tsSec, 0)
 	}
-	if end != "" {
-		if d, err := time.ParseDuration(end); err == nil {
-			endTime = endTime.Add(d)
+	if endTimeString != "" {
+		tsSec, err := strconv.ParseInt(endTimeString, 10, 64)
+		if err != nil {
+			log.Error("parse ts failed", zap.Error(err))
 		}
+		endTime = time.Unix(tsSec, 0)
 	}
-	// Fixme: remove me
-	if endKey == "" {
-		endKey = "~" //\126
-	}
+
+	log.Info("Request matrix",
+		zap.Time("start-time", startTime),
+		zap.Time("end-time", endTime),
+		zap.String("start-key", startKey),
+		zap.String("end-key", endKey),
+	)
 	matrix := s.stats.RangeMatrix(startTime, endTime, startKey, endKey, typ)
 	data, _ := json.Marshal(matrix)
 	_, err := w.Write(data)

@@ -51,6 +51,9 @@ func (v *valueUint64) Clone() Value {
 	clonevalueUint64 := *v
 	return &clonevalueUint64
 }
+func (v *valueUint64) GetValue(typ string) interface{} {
+	return v.uint64
+}
 
 func (v *valueUint64) Reset() {
 	*v = valueUint64{}

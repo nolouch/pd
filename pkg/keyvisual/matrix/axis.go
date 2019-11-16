@@ -14,6 +14,7 @@
 package matrix
 
 import (
+	"fmt"
 	"sort"
 	"time"
 )
@@ -43,16 +44,16 @@ func (axis *DiscreteAxis) Clone() *DiscreteAxis {
 }
 
 // Effect evaluete the count can be denoised to.
-func (axis *DiscreteAxis) Effect(threshold uint64) uint {
+func (axis *DiscreteAxis) Effect(threshold uint64, typ string) uint {
 	var num uint = 0
 	// flag that the last line is lower than the threshold
 	isLastLess := false
 	var lastValue int64 = -1 // last line value
 	for _, line := range axis.Lines {
-		if line.Less(threshold) {
+		if line.Less(threshold, typ) {
 			isLastLess = true
 		} else {
-			if lastValue == -1 || line.GetThreshold() != uint64(lastValue) {
+			if lastValue == -1 || line.GetValue(typ) != uint64(lastValue) {
 				num++
 			}
 			if isLastLess {
@@ -60,7 +61,7 @@ func (axis *DiscreteAxis) Effect(threshold uint64) uint {
 				num++
 			}
 		}
-		lastValue = int64(line.GetThreshold())
+		lastValue = int64(line.GetValue(typ))
 	}
 	if isLastLess {
 		num++
@@ -71,13 +72,13 @@ func (axis *DiscreteAxis) Effect(threshold uint64) uint {
 // DeNoise merge line segments below the amount of information with a specified threshold.
 // adjacent lines and the value lower than threshold can be merge to one line.
 // adjacent lines with same value can be merge to one line.
-func (axis *DiscreteAxis) DeNoise(threshold uint64) {
+func (axis *DiscreteAxis) DeNoise(threshold uint64, typ string) {
 	newAxis := make([]*Line, 0)
 	// flag that the last line is lower than the threshold
 	isLastLess := false
 	var lastIndex int64 = -1 //last line value
 	for _, line := range axis.Lines {
-		if line.Less(threshold) {
+		if line.Less(threshold, typ) {
 			if isLastLess {
 				// merge the line with last less threshold.
 				newAxis[len(newAxis)-1].Value.Merge(line.Value)
@@ -100,6 +101,54 @@ func (axis *DiscreteAxis) DeNoise(threshold uint64) {
 	axis.Lines = newAxis
 }
 
+// DeNoise2 merge line segments below the amount of information with a specified threshold.
+// adjacent lines and the value lower than threshold can be merge to one line.
+// adjacent lines with same value can be merge to one line.
+func (axis *DiscreteAxis) DeNoise2(threshold uint64, target int, typ string) {
+	newAxis := make([]*Line, 0)
+	// flag that the last line is lower than the threshold
+	isLastLess := false
+	var lastIndex int64 = -1 //last line value
+	maxStep := len(axis.Lines) / target
+	num := 0
+	step := 0
+	for _, line := range axis.Lines {
+		if line.Less(threshold, typ) {
+			if isLastLess && step < maxStep {
+				// merge the line with last less threshold.
+				newAxis[len(newAxis)-1].Value.Merge(line.Value)
+				newAxis[len(newAxis)-1].EndKey = line.EndKey
+				step++
+			} else {
+				isLastLess = true
+				newAxis = append(newAxis, line)
+				num++
+				step = 0
+
+			}
+		} else {
+			isLastLess = false
+			if lastIndex == -1 || !line.Value.Equal(axis.Lines[lastIndex].Value) {
+				newAxis = append(newAxis, line)
+				num++
+				step = 0
+			} else if step < maxStep {
+				newAxis[len(newAxis)-1].Value.Merge(line.Value)
+				newAxis[len(newAxis)-1].EndKey = line.EndKey
+				step++
+			} else {
+				newAxis = append(newAxis, line)
+				num++
+				step = 0
+			}
+		}
+		lastIndex++
+		maxStep = (len(axis.Lines) - num) / target
+	}
+	axis.Lines = newAxis
+	fmt.Println("debuging", len(newAxis))
+}
+
 // ReSample rebuild the key axis by the specified key.
 func (axis *DiscreteAxis) ReSample(dst *DiscreteAxis) {
 	srcKeys := axis.GetDiscreteKeys()
@@ -108,6 +157,7 @@ func (axis *DiscreteAxis) ReSample(dst *DiscreteAxis) {
 	lengthDst := len(dstKeys)
 	startIndex := 0
 	endIndex := 0
+	//fmt.Println("Begin", srcKeys[lengthSrc-1], lengthSrc-1, lengthDst-1)
 	for i := 1; i < lengthSrc; i++ {
 		for j := endIndex; j < lengthDst; j++ {
 			if dstKeys[j] == srcKeys[i-1] {
@@ -118,15 +168,23 @@ func (axis *DiscreteAxis) ReSample(dst *DiscreteAxis) {
 				break
 			}
 		}
+
+		//fmt.Printf("Debug[%d]: start:%v(%d) ,end:%v(%d) \n", i, []byte(dstKeys[startIndex]), startIndex, []byte(dstKeys[endIndex]), endIndex)
 		count := endIndex - startIndex
 		if count == 0 {
+			//fmt.Printf("Debug: start:%v(%d) ,end:%v(%d) \n", []byte(dstKeys[startIndex]), startIndex, []byte(dstKeys[endIndex]), endIndex)
 			continue
 		}
+		//fmt.Printf("Debug: start:%v(%d) ,end:%v(%d) \n", []byte(dstKeys[startIndex]), startIndex, []byte(dstKeys[endIndex]), endIndex)
 		newAxis := axis.Lines[i-1].Split(count)
 		for j := startIndex; j < endIndex; j++ {
 			dst.Lines[j].Merge(newAxis)
 		}
 	}
+	//for _, line := range dst.Lines {
+	//	fmt.Printf("%#+v ", line.GetValue("write_bytes"))
+	//}
+	//fmt.Println()
 }
 
 // DeProjection project the src key-axis to dest key-axis.
@@ -193,7 +251,7 @@ func (axis *DiscreteAxis) Range(startKey string, endKey string) *DiscreteAxis {
 		StartKey: "",
 		EndTime:  axis.EndTime,
 	}
-	if endKey <= axis.StartKey {
+	if endKey <= axis.StartKey && endKey != "" {
 		return newAxis
 	}
 	size := len(axis.Lines)
@@ -207,6 +265,10 @@ func (axis *DiscreteAxis) Range(startKey string, endKey string) *DiscreteAxis {
 	endIndex := sort.Search(size, func(i int) bool {
 		return axis.Lines[i].EndKey >= endKey
 	})
+	if endKey == "" {
+		endIndex = len(axis.Lines)
+	}
+
 	if endIndex != size {
 		endIndex++
 	}

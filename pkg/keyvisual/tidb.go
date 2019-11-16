@@ -18,7 +18,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/pingcap/pd/pkg/keyvisual/matrix"
+//	"github.com/pingcap/pd/pkg/keyvisual/matrix"
 )
 
 // Table saves the info of a table
@@ -92,81 +92,81 @@ func updateTables() {
 
 // RangeTableID generate the matrix according the table info.
 // Fixme: the label information should get from tidb.
-func RangeTableID(newMatrix *matrix.Matrix) *matrix.Matrix {
-	keys := newMatrix.Keys
-	if keys == nil || len(keys) < 2 {
-		return newMatrix
-	}
-	newMatrix.Labels = make([]*matrix.Label, 0)
-	for i := 0; i < len(keys)-1; i++ {
-		newMatrix.Labels = append(newMatrix.Labels, &matrix.Label{
-			StartKey: keys[i],
-			EndKey:   keys[i+1],
-			Names:    make([]*string, 0),
-		})
-	}
-	updateTables()
-	tbls := loadTables()
-	for _, tbl := range tbls {
-		dataStart := GenTableRecordPrefix(tbl.ID)
-		dataEnd := GenTableRecordPrefix(tbl.ID + 1)
-
-		start := sort.Search(len(keys), func(i int) bool {
-			return keys[i] > dataStart
-		})
-
-		end := sort.Search(len(keys), func(i int) bool {
-			return keys[i] >= dataEnd
-		})
-		if start > len(keys)-1 {
-			continue
-		}
-		if start > 0 {
-			start--
-		}
-
-		if end >= len(keys) {
-			end = len(keys) - 1
-		}
-		for i := start; i < end; i++ {
-			if dataStart < newMatrix.Labels[i].StartKey && dataEnd > newMatrix.Labels[i].EndKey {
-				newMatrix.Labels[i].StartKey = dataStart
-				newMatrix.Labels[i].EndKey = dataEnd
-			}
-			name := fmt.Sprintf("tidb:%s, table:%s, data", tbl.DB, tbl.Name)
-			newMatrix.Labels[i].Names = append(newMatrix.Labels[i].Names, &name)
-		}
-		for idx, idxName := range tbl.Indices {
-
-			indexStart := GenTableIndexPrefix(tbl.ID, idx)
-			indexEnd := GenTableIndexPrefix(tbl.ID, idx+1)
-			start := sort.Search(len(keys), func(i int) bool {
-				return keys[i] > indexStart
-			})
-
-			end := sort.Search(len(keys), func(i int) bool {
-				return keys[i] >= indexEnd
-			})
-
-			if start > len(keys)-1 {
-				continue
-			}
-			if start > 0 {
-				start--
-			}
-			if end >= len(keys) {
-				end = len(keys) - 1
-			}
-
-			for i := start; i < end; i++ {
-				if indexStart < newMatrix.Labels[i].StartKey && indexEnd > newMatrix.Labels[i].EndKey {
-					newMatrix.Labels[i].StartKey = indexStart
-					newMatrix.Labels[i].EndKey = indexEnd
-				}
-				name := fmt.Sprintf("tidb:%s, table:%s, index:%s", tbl.DB, tbl.Name, idxName)
-				newMatrix.Labels[i].Names = append(newMatrix.Labels[i].Names, &name)
-			}
-		}
-	}
-	return newMatrix
-}
+//func RangeTableID(newMatrix *matrix.Matrix) *matrix.Matrix {
+//	keys := newMatrix.Keys
+//	if keys == nil || len(keys) < 2 {
+//		return newMatrix
+//	}
+//	newMatrix.Labels = make([]*matrix.Label, 0)
+//	for i := 0; i < len(keys)-1; i++ {
+//		newMatrix.Labels = append(newMatrix.Labels, &matrix.Label{
+//			StartKey: keys[i],
+//			EndKey:   keys[i+1],
+//			Names:    make([]*string, 0),
+//		})
+//	}
+//	updateTables()
+//	tbls := loadTables()
+//	for _, tbl := range tbls {
+//		dataStart := GenTableRecordPrefix(tbl.ID)
+//		dataEnd := GenTableRecordPrefix(tbl.ID + 1)
+//
+//		start := sort.Search(len(keys), func(i int) bool {
+//			return keys[i] > dataStart
+//		})
+//
+//		end := sort.Search(len(keys), func(i int) bool {
+//			return keys[i] >= dataEnd
+//		})
+//		if start > len(keys)-1 {
+//			continue
+//		}
+//		if start > 0 {
+//			start--
+//		}
+//
+//		if end >= len(keys) {
+//			end = len(keys) - 1
+//		}
+//		for i := start; i < end; i++ {
+//			if dataStart < newMatrix.Labels[i].StartKey && dataEnd > newMatrix.Labels[i].EndKey {
+//				newMatrix.Labels[i].StartKey = dataStart
+//				newMatrix.Labels[i].EndKey = dataEnd
+//			}
+//			name := fmt.Sprintf("tidb:%s, table:%s, data", tbl.DB, tbl.Name)
+//			newMatrix.Labels[i].Names = append(newMatrix.Labels[i].Names, &name)
+//		}
+//		for idx, idxName := range tbl.Indices {
+//
+//			indexStart := GenTableIndexPrefix(tbl.ID, idx)
+//			indexEnd := GenTableIndexPrefix(tbl.ID, idx+1)
+//			start := sort.Search(len(keys), func(i int) bool {
+//				return keys[i] > indexStart
+//			})
+//
+//			end := sort.Search(len(keys), func(i int) bool {
+//				return keys[i] >= indexEnd
+//			})
+//
+//			if start > len(keys)-1 {
+//				continue
+//			}
+//			if start > 0 {
+//				start--
+//			}
+//			if end >= len(keys) {
+//				end = len(keys) - 1
+//			}
+//
+//			for i := start; i < end; i++ {
+//				if indexStart < newMatrix.Labels[i].StartKey && indexEnd > newMatrix.Labels[i].EndKey {
+//					newMatrix.Labels[i].StartKey = indexStart
+//					newMatrix.Labels[i].EndKey = indexEnd
+//				}
+//				name := fmt.Sprintf("tidb:%s, table:%s, index:%s", tbl.DB, tbl.Name, idxName)
+//				newMatrix.Labels[i].Names = append(newMatrix.Labels[i].Names, &name)
+//			}
+//		}
+//	}
+//	return newMatrix
+//}

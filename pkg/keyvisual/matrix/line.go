@@ -16,9 +16,8 @@ package matrix
 type Value interface {
 	Split(count int) Value
 	Merge(other Value)
-	Less(threshold uint64) bool
-	GetThreshold() uint64
-	GetValue(typ string) interface{}
+	Less(threshold uint64, typ string) bool
+	GetValue(typ string) uint64
 	Clone() Value
 	Reset()
 	Default() Value
