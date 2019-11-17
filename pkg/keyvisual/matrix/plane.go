@@ -126,37 +126,52 @@ func (plane *DiscretePlane) Pixel(n int, m int, typ string) *Matrix {
 		return nil
 	}
 	// time-axis, avg compress
+	//if len(plane.Axes) >= n {
+	//	// the first part use step1, then step2
+	//	step2 := len(plane.Axes) / n
+	//	step1 := step2 + 1
+	//	n1 := len(plane.Axes) % n
+	//	var index int
+	//	var step int
+
+	//	for i := 0; i < n; i++ {
+	//		if i < n1 {
+	//			step = step1
+	//			index = i * step1
+	//		} else {
+	//			step = step2
+	//			index = n1*step1 + (i-n1)*step2
+	//		}
+	//		// merge to one key-axis
+	//		tempPlane := &DiscretePlane{}
+	//		if i == 0 {
+	//			tempPlane.StartTime = plane.StartTime
+	//		} else {
+	//			tempPlane.StartTime = plane.Axes[index-1].EndTime
+	//		}
+	//		tempPlane.Axes = make([]*DiscreteAxis, step)
+	//		for i := 0; i < step; i++ {
+	//			tempPlane.Axes[i] = plane.Axes[index+i].Clone()
+	//		}
+	//		axis, _ := tempPlane.Compact()
+
+	//		// append to new plane
+	//		newPlane.Axes = append(newPlane.Axes, axis)
+	//	}
+	//} else {
+	//	newPlane.Axes = make([]*DiscreteAxis, len(plane.Axes))
+	//	for i := 0; i < len(plane.Axes); i++ {
+	//		newPlane.Axes[i] = plane.Axes[i].Clone()
+	//	}
+	//}
+
+	// Do not compress the time-axis
 	if len(plane.Axes) >= n {
-		// the first part use step1, then step2
-		step2 := len(plane.Axes) / n
-		step1 := step2 + 1
-		n1 := len(plane.Axes) % n
-		var index int
-		var step int
-
+		newPlane.Axes = make([]*DiscreteAxis, n)
+		length := len(plane.Axes)
 		for i := 0; i < n; i++ {
-			if i < n1 {
-				step = step1
-				index = i * step1
-			} else {
-				step = step2
-				index = n1*step1 + (i-n1)*step2
-			}
-			// merge to one key-axis
-			tempPlane := &DiscretePlane{}
-			if i == 0 {
-				tempPlane.StartTime = plane.StartTime
-			} else {
-				tempPlane.StartTime = plane.Axes[index-1].EndTime
-			}
-			tempPlane.Axes = make([]*DiscreteAxis, step)
-			for i := 0; i < step; i++ {
-				tempPlane.Axes[i] = plane.Axes[index+i].Clone()
-			}
-			axis, _ := tempPlane.Compact()
-
-			// append to new plane
-			newPlane.Axes = append(newPlane.Axes, axis)
+			j := length - n + i
+			newPlane.Axes[i] = plane.Axes[j].Clone()
 		}
 	} else {
 		newPlane.Axes = make([]*DiscreteAxis, len(plane.Axes))
