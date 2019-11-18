@@ -21,7 +21,9 @@ import (
 	"strconv"
 	"time"
 
+	assetfs "github.com/elazarl/go-bindata-assetfs"
 	"github.com/pingcap/log"
+	"github.com/pingcap/pd/pkg/keyvisual/decorator"
 	"github.com/pingcap/pd/server"
 	"go.uber.org/zap"
 )
@@ -43,8 +45,8 @@ type KeyvisualService struct {
 
 var (
 	defaultLayersConfig = LayersConfig{
-		{Len: 60 * 12, Ratio: 10},
-		{Len: 60 / 10 * 24 * 3, Ratio: 6},
+		{Len: 60 * 24, Ratio: 10},
+		{Len: 60 / 10 * 24 * 15, Ratio: 6},
 		{Len: 24 * 15, Ratio: 24},
 		{Len: 0, Ratio: 0},
 	}
@@ -67,6 +69,13 @@ func RegisterKeyvisualService(svr *server.Server) (http.Handler, server.APIGroup
 		svr:      svr,
 		stats:    stats,
 	}
+	fileServer := http.FileServer(&assetfs.AssetFS{
+		Asset:     Asset,
+		AssetDir:  AssetDir,
+		AssetInfo: AssetInfo,
+		Prefix:    "/public",
+	})
+	k.Handle("/pd/apis/keyvisual/v1/ui/", http.StripPrefix("/pd/apis/keyvisual/v1/ui/", fileServer))
 	k.HandleFunc("/pd/apis/keyvisual/v1/heatmaps", k.Heatmap)
 	k.Run()
 	return k, defaultRegisterAPIGroupInfo
@@ -109,7 +118,7 @@ func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
 		zap.String("end-key", endKey),
 	)
 	matrix := s.stats.RangeMatrix(startTime, endTime, startKey, endKey, typ)
-	data, _ := json.Marshal(matrix)
+	data, _ := json.Marshal(decorator.RangeTableID(matrix))
 	_, err := w.Write(data)
 	perr(err)
 }
