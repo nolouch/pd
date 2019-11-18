@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"time"
 
+	assetfs "github.com/elazarl/go-bindata-assetfs"
 	"github.com/pingcap/log"
 	"github.com/pingcap/pd/server"
 	"go.uber.org/zap"
@@ -67,6 +68,13 @@ func RegisterKeyvisualService(svr *server.Server) (http.Handler, server.APIGroup
 		svr:      svr,
 		stats:    stats,
 	}
+	fileServer := http.FileServer(&assetfs.AssetFS{
+		Asset:     Asset,
+		AssetDir:  AssetDir,
+		AssetInfo: AssetInfo,
+		Prefix:    "/public",
+	})
+	k.Handle("/pd/apis/keyvisual/v1/ui/", http.StripPrefix("/pd/apis/keyvisual/v1/ui/", fileServer))
 	k.HandleFunc("/pd/apis/keyvisual/v1/heatmaps", k.Heatmap)
 	k.Run()
 	return k, defaultRegisterAPIGroupInfo
