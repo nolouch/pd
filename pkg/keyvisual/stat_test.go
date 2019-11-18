@@ -379,7 +379,7 @@ func (s *testStats) TestLayerStatSearch(c *C) {
 func (s *testStats) TestAppend(c *C) {
 	testStat := NewStat(debugLayersConfig)
 	// Open our jsonFile
-	jsonFile, err := os.Open("./data_test/region.txt")
+	jsonFile, err := os.Open("./data_test/region1.txt")
 	// if we os.Open returns an error then handle it
 	c.Assert(err, IsNil)
 	defer jsonFile.Close()
@@ -403,7 +403,7 @@ func (s *testStats) TestAppend(c *C) {
 	testStat.Append(regions)
 	et := time.Now()
 	st := et.Add(-60 * time.Minute)
-	matrix := testStat.RangeMatrix(st, et, "", "", "read_bytes")
+	matrix := testStat.RangeMatrix(st, et, "", "", "write_bytes")
 	d, _ := json.Marshal(matrix)
 	fmt.Println(string(d), len(matrix.Data), len(matrix.Data[0]))
 }

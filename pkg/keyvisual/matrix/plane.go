@@ -212,14 +212,15 @@ func (plane *DiscretePlane) Pixel(n int, m int, typ string) *Matrix {
 		//	for z := range thresholds {
 		//		log.S().Info("eeffee:", z, axis.Effect(thresholds[z], typ), thresholds[z])
 		//	}
+
 		if i > 0 && num1 != uint(m) && num1 > uint(m) {
 			threshold2 := thresholds[i-1]
-			num2 := axis.Effect(threshold2, typ)
-			if (int(num2) - m) < (m - int(num1)) {
-				axis.DeNoise2(threshold2, m, typ)
-			} else {
-				axis.DeNoise2(threshold1, m, typ)
-			}
+			axis.DeNoise2(threshold2, m, typ)
+			//num2 := axis.Effect(threshold2, typ)
+			//if (int(num2) - m) < (m - int(num1)) {
+			//} else {
+			//axis.DeNoise2(threshold1, m, typ)
+			//}
 		} else {
 			axis.DeNoise2(threshold1, m, typ)
 		}

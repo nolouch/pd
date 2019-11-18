@@ -161,17 +161,23 @@ func newLayerStat(ratio int, len int) *layerStat {
 
 // Append appends a key axis to layerStat.
 func (s *layerStat) Append(axis *matrix.DiscreteAxis) {
-	if s.nextLayerStat == nil {
-		// the last layer do not limit the capcity.
-		s.ring = append(s.ring, axis)
-		s.tail++
-		s.empty = false
-		return
-	}
+	//if s.nextLayerStat == nil {
+	//	// the last layer do not limit the capcity.
+	//	s.ring = append(s.ring, axis)
+	//	s.tail++
+	//	s.empty = false
+	//	return
+	//}
 
 	if s.head == s.tail && !s.empty {
-		log.S().Info(s.head, s.tail)
+		// log.S().Info(s.head, s.tail)
 		// compress data
+		if s.nextLayerStat == nil {
+			s.head = (s.head + 1) % s.len
+			s.ring[s.tail] = axis
+			s.tail = (s.tail + 1) % s.len
+			return
+		}
 		plane := new(matrix.DiscretePlane)
 		plane.StartTime = s.startTime
 		plane.Axes = make([]*matrix.DiscreteAxis, s.compactRatio, s.compactRatio)
