@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package keyvisual
+package decorator
 
 import (
 	"encoding/json"
@@ -56,13 +56,13 @@ func request(addr string, uri string, v interface{}) {
 
 func dbRequest(limit uint64) []*dbInfo {
 	var dbInfos = make([]*dbInfo, limit)
-	request(*tidbAddr, "schema", &dbInfos)
+	//request(*tidbAddr, "schema", &dbInfos)
 	return dbInfos
 }
 
 func tableRequest(limit uint64, s string) []*tableInfo {
 	var tableInfos = make([]*tableInfo, limit)
-	uri := fmt.Sprintf("schema/%s", s)
-	request(*tidbAddr, uri, &tableInfos)
+	//uri := fmt.Sprintf("schema/%s", s)
+	//request(*tidbAddr, uri, &tableInfos)
 	return tableInfos
 }
