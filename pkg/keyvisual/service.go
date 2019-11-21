@@ -94,7 +94,7 @@ func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
 	endTimeString := form.Get("endtime")
 	typ := form.Get("type")
 	endTime := time.Now()
-	startTime := endTime.Add(-60 * time.Minute)
+	startTime := endTime.Add(-1200 * time.Minute)
 
 	if startTimeString != "" {
 		tsSec, err := strconv.ParseInt(startTimeString, 10, 64)
