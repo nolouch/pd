@@ -14,278 +14,304 @@
 package matrix
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"testing"
 	"time"
 )
 
+// Implementation of a Value interface for testing
+
 type valueUint64 struct {
 	uint64
 }
 
-func max(a uint64, b uint64) uint64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func (v *valueUint64) Split(count int) Value {
-	res := *v
-	return &res
-}
-func (v *valueUint64) Merge(other Value) {
-	v2 := other.(*valueUint64)
-	v.uint64 = max(v.uint64, v2.uint64)
-}
-
-func (v *valueUint64) Less(threshold uint64) bool {
-	return v.uint64 < threshold
-}
-func (v *valueUint64) GetThreshold() uint64 {
-	return v.uint64
-}
+var zeroValueUint64 Value = &valueUint64{0}
 
 func (v *valueUint64) Clone() Value {
-	clonevalueUint64 := *v
-	return &clonevalueUint64
+	return &valueUint64{v.uint64}
 }
-func (v *valueUint64) GetValue(typ string) interface{} {
+
+func (v *valueUint64) GetValue(_ ValueTag) uint64 {
 	return v.uint64
-}
-
-func (v *valueUint64) Reset() {
-	*v = valueUint64{}
-}
-
-func (v *valueUint64) Default() Value {
-	return new(valueUint64)
 }
 
 func (v *valueUint64) Equal(other Value) bool {
-	another := other.(*valueUint64)
-	return *v == *another
+	v2 := other.(*valueUint64)
+	return v.uint64 == v2.uint64
 }
 
-func SprintDiscreteAxis(axis *DiscreteAxis) string {
-	str := fmt.Sprintf("StartKey: %v\n", axis.StartKey)
+func (v *valueUint64) Split(count int) Value {
+	return &valueUint64{v.uint64 / uint64(count)}
+}
+
+func (v *valueUint64) Merge(other Value) {
+	v2 := other.(*valueUint64)
+	v.uint64 += v2.uint64
+}
+
+func (axis *DiscreteAxis) String() string {
+	var buf bytes.Buffer
+	buf.WriteString(fmt.Sprintf("StartKey: %v\n", axis.StartKey))
 	for _, line := range axis.Lines {
-		str += fmt.Sprintf("[%v, %v]", line.GetThreshold(), line.EndKey)
+		buf.WriteString(fmt.Sprintf("[%v, %v]", line.GetValue(INTEGRATION), line.EndKey))
 	}
-	str += fmt.Sprintf("\nEndTime: %v\n", axis.EndTime)
-	return str
+	buf.WriteString(fmt.Sprintf("\nEndTime: %v\n", axis.EndTime))
+	return buf.String()
 }
 
 func BuildDiscreteAxis(startKey string, keys []string, values []uint64, endTime time.Time) *DiscreteAxis {
-	line := make([]*Line, len(values))
-	for i := 0; i < len(values); i++ {
-		line[i] = &Line{keys[i], &valueUint64{values[i]}}
+	lines := make([]*Line, len(values))
+	for i, value := range values {
+		lines[i] = &Line{
+			EndKey: keys[i],
+			Value:  &valueUint64{value},
+		}
 	}
 	return &DiscreteAxis{
 		StartKey: startKey,
-		Lines:    line,
+		Lines:    lines,
 		EndTime:  endTime,
 	}
 }
 
-func TestClone(t *testing.T) {
+func AssertEq(t *testing.T, dstAxis *DiscreteAxis, expectAxis *DiscreteAxis) {
+	if !reflect.DeepEqual(dstAxis, expectAxis) {
+		t.Fatalf("expect\n%v\nbut got\n%v", expectAxis.String(), dstAxis.String())
+	}
+}
+
+func AssertNe(t *testing.T, dstAxis *DiscreteAxis, expectAxis *DiscreteAxis) {
+	if reflect.DeepEqual(dstAxis, expectAxis) {
+		t.Fatalf("expect not \n%v\nbut got it", dstAxis.String())
+	}
+}
+
+func TestNewZeroAxis(t *testing.T) {
 	startKey := ""
-	uint64List := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
+	endKeyList := []string{"a", "b", "c", "d", "e"}
+	valueList := []uint64{0, 0, 0, 0, 0}
+	endTime := time.Now()
+
+	keySet := make(map[string]struct{})
+	keySet[startKey] = struct{}{}
+	for _, key := range endKeyList {
+		keySet[key] = struct{}{}
+	}
+	// endUnlimited = false
+	expectAxis := BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
+	dstAxis := NewZeroAxis(endTime, keySet, false, zeroValueUint64)
+	AssertEq(t, dstAxis, expectAxis)
+	// endUnlimited = true
+	endKeyList = append(endKeyList, "")
+	valueList = append(valueList, 0)
+	expectAxis = BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
+	dstAxis = NewZeroAxis(endTime, keySet, true, zeroValueUint64)
+	AssertEq(t, dstAxis, expectAxis)
+}
+
+func TestDiscreteAxis_Clone(t *testing.T) {
+	startKey := ""
+	valueList := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
+	zeroValueList := []uint64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 	endKeyList := []string{"a", "b", "d", "e", "h", "i", "k", "l", "t", "z"}
 	endTime := time.Now()
-	axis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
-	axisClone := axis.Clone()
-	if !reflect.DeepEqual(axisClone, axis) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(axisClone), SprintDiscreteAxis(axis))
-	}
+	// zeroValue = nil
+	axis := BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
+	axisClone := axis.Clone(nil)
+	AssertEq(t, axisClone, axis)
 
-	bigUint64 := uint64(100000)
-	expectUint64 := axis.Lines[0].GetThreshold()
-	axisClone.Lines[0].Merge(&valueUint64{bigUint64})
-	if reflect.DeepEqual(axis, axisClone) {
-		t.Fatalf("expect %v, but got %v", expectUint64, bigUint64)
-	}
+	axisClone.Lines[0].Merge(&valueUint64{100})
+	AssertNe(t, axisClone, axis)
+	// zeroValue != nil
+	zeroAxis := BuildDiscreteAxis(startKey, endKeyList, zeroValueList, endTime)
+	axisClone = axis.Clone(zeroValueUint64)
+	AssertEq(t, axisClone, zeroAxis)
 }
 
-func TestEffect(t *testing.T) {
+func TestDiscreteAxis_GetDiscreteKeys(t *testing.T) {
 	startKey := ""
-	uint64List := []uint64{0, 0, 10, 2, 3, 3, 0, 7, 11, 2}
-	endKeyList := []string{"a", "b", "d", "e", "h", "i", "k", "l", "t", "z"}
-	endTime := time.Now()
-	axis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
-
-	max := 13
-	num := make([]uint, max)
-
-	expect := []uint{8, 8, 8, 8, 6, 6, 6, 6, 5, 5, 5, 3, 1}
-	for i := 0; i < max; i++ {
-		num[i] = axis.Effect(uint64(i))
-	}
-
-	if !reflect.DeepEqual(num, expect) {
-		t.Fatalf("expect %v, but got %v", expect, num)
-	}
-}
-
-func TestDeNoise(t *testing.T) {
-	startKey := ""
-	uint64List := []uint64{4, 0, 10, 2, 3, 3, 0, 7, 11, 2, 1}
-	endKeyList := []string{"a", "b", "d", "e", "h", "i", "k", "l", "t", "w", "z"}
-	endTime := time.Now()
-	axis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
-
-	// first time.
-	threshold1 := uint64(3)
-	expectUint64List1 := []uint64{4, 0, 10, 2, 3, 0, 7, 11, 2}
-	expectEndKeyList1 := []string{"a", "b", "d", "e", "i", "k", "l", "t", "z"}
-	expectAxis1 := BuildDiscreteAxis(startKey, expectEndKeyList1, expectUint64List1, endTime)
-	axis.DeNoise(threshold1)
-	if !reflect.DeepEqual(axis, expectAxis1) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(expectAxis1), SprintDiscreteAxis(axis))
-	}
-
-	/**********************************************************/
-	newAxis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
-	// second test.
-	threshold2 := uint64(12)
-	expectUint64List2 := []uint64{11}
-	expectEndKeyList2 := []string{"z"}
-	expectAxis2 := BuildDiscreteAxis(startKey, expectEndKeyList2, expectUint64List2, endTime)
-	newAxis.DeNoise(threshold2)
-	if !reflect.DeepEqual(newAxis, expectAxis2) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(expectAxis2), SprintDiscreteAxis(newAxis))
-	}
-}
-
-func TestReSample(t *testing.T) {
-	startKey := ""
-	uint64List := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
+	valueList := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
 	endKeyList := []string{"a", "c", "d", "h", "i", "m", "q", "t", "x", "z"}
 	endTime := time.Now()
-	axis := BuildDiscreteAxis("\n", endKeyList, uint64List, endTime)
-
-	desKeyList := []string{"a", "b", "c", "d", "f", "h", "i", "l", "m", "o", "p", "q", "t", "x", "z", "zz"}
-	desUint64List := []uint64{2, 1, 0, 10, 3, 1, 5, 9, 3, 0, 2, 0, 3, 7, 2, 0}
-	expectUint64List := []uint64{2, 1, 0, 10, 3, 2, 5, 9, 3, 0, 2, 0, 7, 11, 2, 0}
-	desAxis := BuildDiscreteAxis(startKey, desKeyList, desUint64List, endTime)
-	expectAxis := BuildDiscreteAxis(startKey, desKeyList, expectUint64List, endTime)
-
-	axis.ReSample(desAxis)
-	if !reflect.DeepEqual(desAxis, expectAxis) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(expectAxis), SprintDiscreteAxis(desAxis))
-	}
-
-	//对空轴的情况测试
-	axis = BuildDiscreteAxis("\n2", []string{}, []uint64{}, endTime)
-	expectAxis = desAxis.Clone()
-	axis.ReSample(desAxis)
-	if !reflect.DeepEqual(desAxis, expectAxis) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(expectAxis), SprintDiscreteAxis(desAxis))
-	}
-}
-
-func TestDeProjection(t *testing.T) {
-	startKey := "\n"
-	uint64List := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
-	endKeyList := []string{"b", "c", "d", "h", "i", "m", "q", "t", "x", "z"}
-	endTime := time.Now()
-	axis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
-
-	desStartKey := ""
-	desKeyList := []string{"a", "c", "d", "d", "f", "g", "m", "z"}
-	desUint64List := []uint64{0, 0, 0, 0, 0, 0, 0, 0}
-
-	expectUint64List := []uint64{0, 0, 10, 10, 2, 2, 4, 11}
-	desAxis := BuildDiscreteAxis(desStartKey, desKeyList, desUint64List, endTime)
-	expectAxis := BuildDiscreteAxis(desStartKey, desKeyList, expectUint64List, endTime)
-
-	axis.DeProjection(desAxis)
-	if !reflect.DeepEqual(desAxis, expectAxis) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(expectAxis), SprintDiscreteAxis(desAxis))
-	}
-}
-
-func TestGetDiscreteKeys(t *testing.T) {
-	startKey := ""
-	uint64List := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
-	endKeyList := []string{"a", "c", "d", "h", "i", "m", "q", "t", "x", "z"}
-	endTime := time.Now()
-	axis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
+	axis := BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
 
 	expectKeys := DiscreteKeys{"", "a", "c", "d", "h", "i", "m", "q", "t", "x", "z"}
 	keys := axis.GetDiscreteKeys()
 	if !reflect.DeepEqual(keys, expectKeys) {
 		t.Fatalf("expect %v, but got %v", expectKeys, keys)
 	}
-
-	// lines is empty
-	axis.Lines = []*Line{}
-	expectKeys = DiscreteKeys{""}
-	keys = axis.GetDiscreteKeys()
-	if !reflect.DeepEqual(keys, expectKeys) {
-		t.Fatalf("expect %v, but got %v", expectKeys, keys)
-	}
 }
 
-func TestRange(t *testing.T) {
+func TestDiscreteAxis_SplitReSample(t *testing.T) {
 	startKey := ""
-	uint64List := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
+	valueList := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
+	endKeyList := []string{"a", "c", "d", "h", "i", "m", "q", "t", "x", "z"}
+	endTime := time.Now()
+	axis := BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
+
+	dstKeyList := []string{"a", "b", "c", "d", "f", "h", "i", "l", "m", "o", "p", "q", "t", "x", "z", "zz"}
+	dstValueList := []uint64{2, 1, 0, 10, 3, 1, 5, 9, 3, 0, 2, 0, 3, 7, 2, 0}
+	expectValueList := []uint64{2, 1, 0, 20, 4, 2, 9, 10, 4, 0, 2, 0, 10, 18, 4, 0}
+	dstAxis := BuildDiscreteAxis(startKey, dstKeyList, dstValueList, endTime)
+	expectAxis := BuildDiscreteAxis(startKey, dstKeyList, expectValueList, endTime)
+
+	axis.SplitReSample(dstAxis)
+	AssertEq(t, dstAxis, expectAxis)
+}
+
+func TestDiscreteAxis_MergeReSample(t *testing.T) {
+	startKey := ""
+	valueList := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
+	endKeyList := []string{"a", "c", "d", "h", "i", "m", "q", "t", "x", "z"}
+	endTime := time.Now()
+	axis := BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
+
+	dstKeys := DiscreteKeys{"", "a", "h", "t", "z"}
+	var dstKeyList []string = dstKeys[1:]
+	expectValueList := []uint64{0, 12, 14, 13}
+	axis.MergeReSample(dstKeys)
+	expectAxis := BuildDiscreteAxis(startKey, dstKeyList, expectValueList, endTime)
+
+	AssertEq(t, axis, expectAxis)
+}
+
+func TestDiscreteAxis_DeNoise(t *testing.T) {
+	startKey := ""
+	endKeyList := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"}
+	endTime := time.Now()
+
+	assertRowsEq := func(dst, expect int) {
+		if dst != expect {
+			t.Fatalf("expect %d, but got %d", expect, dst)
+		}
+	}
+
+	// Evenly distributed
+	valueList := []uint64{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+	axis := BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
+
+	axisClone := axis.Clone(nil)
+	AssertEq(t, axisClone, axis)
+	assertRowsEq(axisClone.DeNoise(INTEGRATION, 3, 0, 0), 5)
+
+	expectKeyList := []string{"2", "5", "8", "11", "14"}
+	expectValueList := []uint64{3, 3, 3, 3, 3}
+	expectAxis := BuildDiscreteAxis(startKey, expectKeyList, expectValueList, endTime)
+	dstAxis := axis.Clone(nil)
+	dstAxis.DeNoise(INTEGRATION, 3, 4, 5)
+	AssertEq(t, dstAxis, expectAxis)
+
+	expectKeyList = []string{"1", "3", "5", "7", "9", "11", "13", "14"}
+	expectValueList = []uint64{2, 2, 2, 2, 2, 2, 2, 1}
+	expectAxis = BuildDiscreteAxis(startKey, expectKeyList, expectValueList, endTime)
+	dstAxis = axis.Clone(nil)
+	dstAxis.DeNoise(INTEGRATION, 3, 2, 5)
+	AssertEq(t, dstAxis, expectAxis)
+
+	// hot spot
+	valueList = []uint64{0, 0, 0, 99, 100, 101, 0, 0, 1, 1, 1, 100000, 1, 0, 10}
+	axis = BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
+
+	assertRowsEq(axis.DeNoise(INTEGRATION, 3, 0, 0), 8)
+	assertRowsEq(axis.DeNoise(INTEGRATION, 20, 0, 0), 7)
+	assertRowsEq(axis.DeNoise(INTEGRATION, 1000, 0, 0), 3)
+
+	expectKeyList = []string{"1", "2", "3", "4", "5", "7", "9", "10", "11", "13", "14"}
+	expectValueList = []uint64{0, 0, 99, 100, 101, 0, 2, 1, 100000, 1, 10}
+	expectAxis = BuildDiscreteAxis(startKey, expectKeyList, expectValueList, endTime)
+	dstAxis = axis.Clone(nil)
+	dstAxis.DeNoise(INTEGRATION, 3, 2, 5)
+	AssertEq(t, dstAxis, expectAxis)
+
+	expectKeyList = []string{"2", "3", "4", "5", "9", "10", "11", "14"}
+	expectValueList = []uint64{0, 99, 100, 101, 2, 1, 100000, 11}
+	expectAxis = BuildDiscreteAxis(startKey, expectKeyList, expectValueList, endTime)
+	dstAxis = axis.Clone(nil)
+	dstAxis.DeNoise(INTEGRATION, 20, 4, 5)
+	AssertEq(t, dstAxis, expectAxis)
+
+	expectKeyList = []string{"2", "5", "8", "10", "11", "14"}
+	expectValueList = []uint64{0, 300, 1, 2, 100000, 11}
+	expectAxis = BuildDiscreteAxis(startKey, expectKeyList, expectValueList, endTime)
+	dstAxis = axis.Clone(nil)
+	dstAxis.DeNoise(INTEGRATION, 1000, 3, 5)
+	AssertEq(t, dstAxis, expectAxis)
+}
+
+func TestDiscreteAxis_Divide(t *testing.T) {
+	startKey := ""
+	endKeyList := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"}
+	endTime := time.Now()
+
+	assertKeysEq := func(dst, expect DiscreteKeys) {
+		if !reflect.DeepEqual(dst, expect) {
+			t.Fatalf("expect %v, but got %v", expect, dst)
+		}
+	}
+
+	// Evenly distributed
+	valueList := []uint64{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+	axis := BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
+
+	dstKeys := axis.Divide(8, INTEGRATION, zeroValueUint64)
+	expectKeys := DiscreteKeys{"", "2", "5", "8", "11", "14"}
+	assertKeysEq(dstKeys, expectKeys)
+
+	dstKeys = axis.Divide(20, INTEGRATION, zeroValueUint64)
+	expectKeys = DiscreteKeys{"", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"}
+	assertKeysEq(dstKeys, expectKeys)
+
+	// hot spot
+	valueList = []uint64{0, 0, 0, 99, 100, 101, 0, 0, 1, 1, 1, 100000, 1, 0, 10}
+	axis = BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
+
+	dstKeys = axis.Divide(8, INTEGRATION, zeroValueUint64)
+	expectKeys = DiscreteKeys{"", "4", "5", "10", "11", "14"}
+	assertKeysEq(dstKeys, expectKeys)
+
+	dstKeys = axis.Divide(5, INTEGRATION, zeroValueUint64)
+	expectKeys = DiscreteKeys{"", "7", "10", "11", "14"}
+	assertKeysEq(dstKeys, expectKeys)
+
+	dstKeys = axis.Divide(20, INTEGRATION, zeroValueUint64)
+	expectKeys = DiscreteKeys{"", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"}
+	assertKeysEq(dstKeys, expectKeys)
+}
+
+func TestDiscreteAxis_Range(t *testing.T) {
+	startKey := ""
+	valueList := []uint64{0, 0, 10, 2, 4, 3, 0, 7, 11, 2}
 	endKeyList := []string{"a", "c", "d", "h", "i", "m", "q", "t", "x", "y"}
 	endTime := time.Now()
-	axis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
+	axis := BuildDiscreteAxis(startKey, endKeyList, valueList, endTime)
 
-	start := ""
-	end := "z"
-	expectAxis := axis.Clone()
-	rangeAxis := axis.Range(start, end)
-	if !reflect.DeepEqual(expectAxis, rangeAxis) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(expectAxis), SprintDiscreteAxis(rangeAxis))
-	}
+	dstAxis := axis.Range("", "z", zeroValueUint64)
+	expectAxis := axis.Clone(nil)
+	AssertEq(t, dstAxis, expectAxis)
 
-	start = ""
-	end = "\n"
-	expectAxis = &DiscreteAxis{
-		StartKey: "",
-		Lines:    []*Line{{axis.Lines[0].EndKey, axis.Lines[0].Clone()}},
-		EndTime:  axis.EndTime,
-	}
-	rangeAxis = axis.Range(start, end)
-	if !reflect.DeepEqual(expectAxis, rangeAxis) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(expectAxis), SprintDiscreteAxis(rangeAxis))
-	}
+	dstAxis = axis.Range("", "0", zeroValueUint64)
+	expectAxis = BuildDiscreteAxis("", []string{"a"}, []uint64{0}, endTime)
+	AssertEq(t, dstAxis, expectAxis)
 
-	start = "b"
-	end = "o"
-	startIndex := 1
-	endIndex := 7
-	expectAxis = &DiscreteAxis{
-		StartKey: "a",
-		Lines:    make([]*Line, 0, endIndex-startIndex),
-		EndTime:  axis.EndTime,
-	}
-	for i := startIndex; i < endIndex; i++ {
-		expectAxis.Lines = append(expectAxis.Lines, &Line{axis.Lines[i].EndKey, axis.Lines[i].Clone()})
-	}
-	rangeAxis = axis.Range(start, end)
-	if !reflect.DeepEqual(expectAxis, rangeAxis) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(expectAxis), SprintDiscreteAxis(rangeAxis))
-	}
+	dstAxis = axis.Range("t", "", zeroValueUint64)
+	expectAxis = BuildDiscreteAxis("t", []string{"x", "y"}, []uint64{11, 2}, endTime)
+	AssertEq(t, dstAxis, expectAxis)
 
-	start = "\n"
-	end = "o"
-	startIndex = 0
-	endIndex = 7
-	expectAxis = &DiscreteAxis{
-		StartKey: "",
-		Lines:    make([]*Line, 0, endIndex-startIndex),
-		EndTime:  axis.EndTime,
-	}
-	for i := startIndex; i < endIndex; i++ {
-		expectAxis.Lines = append(expectAxis.Lines, &Line{axis.Lines[i].EndKey, axis.Lines[i].Clone()})
-	}
-	rangeAxis = axis.Range(start, end)
-	if !reflect.DeepEqual(expectAxis, rangeAxis) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(expectAxis), SprintDiscreteAxis(rangeAxis))
-	}
+	dstAxis = axis.Range("z", "", zeroValueUint64)
+	expectAxis = BuildDiscreteAxis("z", []string{""}, []uint64{0}, endTime)
+	AssertEq(t, dstAxis, expectAxis)
+
+	dstAxis = axis.Range("t", "x", zeroValueUint64)
+	expectAxis = BuildDiscreteAxis("t", []string{"x"}, []uint64{11}, endTime)
+	AssertEq(t, dstAxis, expectAxis)
+
+	dstAxis = axis.Range("b", "j", zeroValueUint64)
+	expectAxis = BuildDiscreteAxis("a", []string{"c", "d", "h", "i", "m"}, []uint64{0, 10, 2, 4, 3}, endTime)
+	AssertEq(t, dstAxis, expectAxis)
+
+	dstAxis = axis.Range("0", "b", zeroValueUint64)
+	expectAxis = BuildDiscreteAxis("", []string{"a", "c"}, []uint64{0, 0}, endTime)
+	AssertEq(t, dstAxis, expectAxis)
 }

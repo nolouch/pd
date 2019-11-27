@@ -14,19 +14,15 @@
 package matrix
 
 import (
+	"bytes"
 	"fmt"
-	"reflect"
-	"strconv"
 	"testing"
 	"time"
 )
 
-func buildTime(min int) time.Time {
-	str := strconv.Itoa(min)
-	str += "m"
-	dur, _ := time.ParseDuration(str)
-	time := time.Now()
-	return time.Add(-dur)
+func buildTime(subtract int) time.Time {
+	dur, _ := time.ParseDuration(fmt.Sprintf("-%dm", subtract))
+	return time.Now().Add(dur)
 }
 
 func BuildDiscretePlane(times []int, keys [][]string, values [][]uint64) *DiscretePlane {
@@ -34,109 +30,62 @@ func BuildDiscretePlane(times []int, keys [][]string, values [][]uint64) *Discre
 		StartTime: buildTime(times[0]),
 		Axes:      make([]*DiscreteAxis, len(times)-1),
 	}
-
 	for i := 0; i < len(keys); i++ {
 		plane.Axes[i] = BuildDiscreteAxis(keys[i][0], keys[i][1:], values[i], buildTime(times[i+1]))
 	}
 	return plane
 }
 
-func buildDiscreteMinutes(times []time.Time) []int {
-	minutes := make([]int, len(times))
-	for i := 0; i < len(times); i++ {
-		minutes[i] = times[i].Minute()
+func (mx *Matrix) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("Keys:")
+	for _, key := range mx.Keys {
+		buf.WriteString(" ")
+		buf.WriteString(key.Key)
 	}
-	return minutes
-}
-
-func SprintMatrix(matrix *Matrix) string {
-	str := fmt.Sprintf("Keys: ")
-	for i := 0; i < len(matrix.Keys); i++ {
-		str += fmt.Sprintf("%v ", matrix.Keys[i])
+	buf.WriteString("\nTimes:")
+	for _, ts := range mx.Times {
+		buf.WriteString(" ")
+		buf.WriteString(fmt.Sprint(ts))
 	}
-	str += "\n"
-	str += fmt.Sprintf("Times: ")
-	for i := 0; i < len(matrix.Times); i++ {
-		str += fmt.Sprintf("%v ", matrix.Times[i].Minute())
-	}
-	str += "\n"
-	for i := 0; i < len(matrix.Data); i++ {
-		for j := 0; j < len(matrix.Data[i]); j++ {
-			str += fmt.Sprintf("%v ", matrix.Data[i][j].GetThreshold())
+	buf.WriteString("\nData:\n")
+	for _, row := range mx.Data {
+		for _, v := range row {
+			buf.WriteString(" ")
+			buf.WriteString(fmt.Sprint(v))
 		}
-		str += "\n"
+		buf.WriteString("\n")
 	}
-	return str
+	return buf.String()
 }
 
-func TestGetDiscreteTimes(t *testing.T) {
-	times := []int{0, 1, 2, 3, 7, 11, 25}
-	keys := [][]string{
-		{""}, {""}, {""}, {""}, {""}, {""},
-	}
-	values := make([][]uint64, len(keys))
-	plane := BuildDiscretePlane(times, keys, values)
-
-	expectTimes := make([]time.Time, len(times))
-	expectTimes[0] = plane.StartTime
-	for i := 1; i < len(times); i++ {
-		expectTimes[i] = plane.Axes[i-1].EndTime
-	}
-	expectMinutes := buildDiscreteMinutes(expectTimes)
-	discreteTimes := plane.GetDiscreteTimes()
-	discreteMinutes := buildDiscreteMinutes(discreteTimes)
-	if !reflect.DeepEqual(discreteMinutes, expectMinutes) {
-		t.Fatalf("expect %v, but got %v", expectMinutes, discreteMinutes)
-	}
-
-	// check if DiscretePlane Axes is nil
-	times = []int{0}
-	keys = [][]string{}
-	values = make([][]uint64, len(keys))
-	plane = BuildDiscretePlane(times, keys, values)
-	expectTimes = make([]time.Time, len(times))
-	expectTimes[0] = plane.StartTime
-	expectMinutes = buildDiscreteMinutes(expectTimes)
-	discreteTimes = plane.GetDiscreteTimes()
-	discreteMinutes = buildDiscreteMinutes(discreteTimes)
-	if !reflect.DeepEqual(discreteMinutes, expectMinutes) {
-		t.Fatalf("expect %v, but got %v", expectMinutes, discreteMinutes)
-	}
-}
-
-func TestCompact(t *testing.T) {
+func TestDiscretePlane_Compact(t *testing.T) {
 	times := []int{20, 15, 10, 5, 0}
 	keys := [][]string{
-		{"z"},
+		{"a", "z"},
 		{"", "b", "f", "h", "i"},
 		{"a", "d", "i", "n", "q"},
 		{"", "e", "i", "k", "n"},
 	}
 	values := [][]uint64{
-		{},
+		{0},
 		{1, 5, 4, 10},
 		{5, 0, 1, 6},
 		{0, 3, 7, 9},
 	}
 	plane := BuildDiscretePlane(times, keys, values)
-	resultAxis, resultStartTime := plane.Compact()
+	dstAxis, _ := plane.Compact(zeroValueUint64)
 
 	endTime := plane.Axes[len(plane.Axes)-1].EndTime
-	startKey := ""
-	uint64List := []uint64{1, 5, 5, 5, 5, 4, 10, 7, 9, 6}
-	endKeyList := []string{"a", "b", "d", "e", "f", "h", "i", "k", "n", "q"}
-	expectAxis := BuildDiscreteAxis(startKey, endKeyList, uint64List, endTime)
-	expectStartTime := plane.StartTime
-
-	if !reflect.DeepEqual(resultStartTime, expectStartTime) {
-		t.Fatalf("expect %v, but got %v", expectStartTime, resultStartTime)
-	}
-	if !reflect.DeepEqual(expectAxis, resultAxis) {
-		t.Fatalf("expect\n%v\nbut got\n%v", SprintDiscreteAxis(expectAxis), SprintDiscreteAxis(resultAxis))
-	}
+	expectStartKey := ""
+	expectKeyList := []string{"a", "b", "d", "e", "f", "h", "i", "k", "n", "q", "z"}
+	expectValueList := []uint64{0, 2, 3, 1, 2, 5, 11, 7, 9, 6, 0}
+	expectAxis := BuildDiscreteAxis(expectStartKey, expectKeyList, expectValueList, endTime)
+	AssertEq(t, dstAxis, expectAxis)
 }
 
-func TestPixel(t *testing.T) {
+/*
+func TestDiscretePlane_Pixel(t *testing.T) {
 	times := []int{20, 15, 10, 5, 0}
 	keys := [][]string{
 		{"b", "c", "e", "l", "m", "o"},
@@ -150,6 +99,7 @@ func TestPixel(t *testing.T) {
 		{5, 0, 1, 6, 4},
 		{0, 3, 7, 9, 5},
 	}
+
 	plane := BuildDiscretePlane(times, keys, values)
 
 	timeN := DiscreteTimes{plane.StartTime, plane.Axes[1].EndTime, plane.Axes[3].EndTime}
@@ -178,4 +128,4 @@ func TestPixel(t *testing.T) {
 	if !reflect.DeepEqual(expectMatrix, matrix) {
 		t.Fatalf("expect: %v\nbut got: %v", SprintMatrix(expectMatrix), SprintMatrix(matrix))
 	}
-}
+}*/
