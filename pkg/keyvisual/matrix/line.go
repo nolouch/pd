@@ -13,15 +13,16 @@
 
 package matrix
 
+type ValueTag int
+
+const INTEGRATION ValueTag = 0
+
 type Value interface {
+	Clone() Value
+	GetValue(tag ValueTag) uint64
+	Equal(other Value) bool
 	Split(count int) Value
 	Merge(other Value)
-	Less(threshold uint64, typ string) bool
-	GetValue(typ string) uint64
-	Clone() Value
-	Reset()
-	Default() Value
-	Equal(other Value) bool
 }
 
 type Line struct {

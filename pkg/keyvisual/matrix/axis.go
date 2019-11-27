@@ -14,7 +14,6 @@
 package matrix
 
 import (
-	"fmt"
 	"sort"
 	"time"
 )
@@ -28,136 +27,106 @@ type DiscreteAxis struct {
 
 type DiscreteKeys []string
 
-func (axis *DiscreteAxis) Clone() *DiscreteAxis {
+func NewEmptyAxis(endTime time.Time, startKey, endKey string, zeroValue Value) *DiscreteAxis {
+	return &DiscreteAxis{
+		StartKey: startKey,
+		Lines: []*Line{
+			{
+				EndKey: endKey,
+				Value:  zeroValue.Clone(),
+			},
+		},
+		EndTime: endTime,
+	}
+}
+
+func NewZeroAxis(endTime time.Time, keySet map[string]struct{}, endUnlimited bool, zeroValue Value) *DiscreteAxis {
+	keys := make([]string, len(keySet))
+	i := 0
+	for key := range keySet {
+		keys[i] = key
+		i++
+	}
+	sort.Strings(keys)
+	axis := &DiscreteAxis{
+		StartKey: keys[0],
+		Lines:    make([]*Line, len(keySet)-1),
+		EndTime:  endTime,
+	}
+
+	for i, key := range keys[1:] {
+		axis.Lines[i] = &Line{
+			EndKey: key,
+			Value:  zeroValue.Clone(),
+		}
+	}
+
+	if endUnlimited {
+		axis.Lines = append(axis.Lines, &Line{
+			EndKey: "",
+			Value:  zeroValue.Clone(),
+		})
+	}
+	return axis
+}
+
+// If zeroValue is nil, clone line.Value. Otherwise clone zeroValue
+func (axis *DiscreteAxis) Clone(zeroValue Value) *DiscreteAxis {
 	newAxis := &DiscreteAxis{
 		StartKey: axis.StartKey,
 		EndTime:  axis.EndTime,
+		Lines:    make([]*Line, len(axis.Lines)),
 	}
-	for i := 0; i < len(axis.Lines); i++ {
-		line := &Line{
-			EndKey: axis.Lines[i].EndKey,
-			Value:  axis.Lines[i].Value.Clone(),
+	for i, line := range axis.Lines {
+		if zeroValue == nil {
+			newAxis.Lines[i] = &Line{
+				EndKey: line.EndKey,
+				Value:  line.Value.Clone(),
+			}
+		} else {
+			newAxis.Lines[i] = &Line{
+				EndKey: line.EndKey,
+				Value:  zeroValue.Clone(),
+			}
 		}
-		newAxis.Lines = append(newAxis.Lines, line)
 	}
 	return newAxis
 }
 
-// Effect evaluete the count can be denoised to.
-func (axis *DiscreteAxis) Effect(threshold uint64, typ string) uint {
-	var num uint = 0
-	// flag that the last line is lower than the threshold
-	isLastLess := false
-	var lastValue int64 = -1 // last line value
-	for _, line := range axis.Lines {
-		if line.Less(threshold, typ) {
-			isLastLess = true
-		} else {
-			if lastValue == -1 || line.GetValue(typ) != uint64(lastValue) {
-				num++
-			}
-			if isLastLess {
-				isLastLess = false
-				num++
-			}
-		}
-		lastValue = int64(line.GetValue(typ))
+// GetDiscreteKeys returns the keys above this axis.
+func (axis *DiscreteAxis) GetDiscreteKeys() DiscreteKeys {
+	discreteKeys := make(DiscreteKeys, len(axis.Lines)+1)
+	discreteKeys[0] = axis.StartKey
+	for i, line := range axis.Lines {
+		discreteKeys[i+1] = line.EndKey
 	}
-	if isLastLess {
-		num++
-	}
-	return num
+	return discreteKeys
 }
 
-// DeNoise merge line segments below the amount of information with a specified threshold.
-// adjacent lines and the value lower than threshold can be merge to one line.
-// adjacent lines with same value can be merge to one line.
-func (axis *DiscreteAxis) DeNoise(threshold uint64, typ string) {
-	newAxis := make([]*Line, 0)
-	// flag that the last line is lower than the threshold
-	isLastLess := false
-	var lastIndex int64 = -1 //last line value
-	for _, line := range axis.Lines {
-		if line.Less(threshold, typ) {
-			if isLastLess {
-				// merge the line with last less threshold.
-				newAxis[len(newAxis)-1].Value.Merge(line.Value)
-				newAxis[len(newAxis)-1].EndKey = line.EndKey
-			} else {
-				isLastLess = true
-				newAxis = append(newAxis, line)
-			}
-		} else {
-			isLastLess = false
-			if lastIndex == -1 || !line.Value.Equal(axis.Lines[lastIndex].Value) {
-				newAxis = append(newAxis, line)
-			} else {
-				newAxis[len(newAxis)-1].Value.Merge(line.Value)
-				newAxis[len(newAxis)-1].EndKey = line.EndKey
-			}
+// The rows from startIndex to endIndex are merged into startIndex and returned.
+func (axis *DiscreteAxis) compact(startIndex, endIndex int) *Line {
+	if startIndex >= endIndex {
+		panic("CompactUnit's endIndex should be greater than startIndex.")
+	} else if startIndex+1 == endIndex {
+		return axis.Lines[startIndex]
+	} else {
+		line := axis.Lines[startIndex]
+		for i := startIndex + 1; i < endIndex; i++ {
+			line.Merge(axis.Lines[i].Value)
 		}
-		lastIndex++
+		line.EndKey = axis.Lines[endIndex-1].EndKey
+		return line
 	}
-	axis.Lines = newAxis
-}
-
-// DeNoise2 merge line segments below the amount of information with a specified threshold.
-// adjacent lines and the value lower than threshold can be merge to one line.
-// adjacent lines with same value can be merge to one line.
-func (axis *DiscreteAxis) DeNoise2(threshold uint64, target int, typ string) {
-	newAxis := make([]*Line, 0)
-	// flag that the last line is lower than the threshold
-	isLastLess := false
-	var lastIndex int64 = -1 //last line value
-	maxStep := len(axis.Lines) / target
-	num := 0
-	step := 0
-	for _, line := range axis.Lines {
-		if line.Less(threshold, typ) {
-			if isLastLess && step < maxStep {
-				// merge the line with last less threshold.
-				newAxis[len(newAxis)-1].Value.Merge(line.Value)
-				newAxis[len(newAxis)-1].EndKey = line.EndKey
-				step++
-			} else {
-				isLastLess = true
-				newAxis = append(newAxis, line)
-				num++
-				step = 0
-
-			}
-		} else {
-			isLastLess = false
-			if lastIndex == -1 || !line.Value.Equal(axis.Lines[lastIndex].Value) {
-				newAxis = append(newAxis, line)
-				num++
-				step = 0
-			} else if step < maxStep {
-				newAxis[len(newAxis)-1].Value.Merge(line.Value)
-				newAxis[len(newAxis)-1].EndKey = line.EndKey
-				step++
-			} else {
-				newAxis = append(newAxis, line)
-				num++
-				step = 0
-			}
-		}
-		lastIndex++
-		maxStep = (len(axis.Lines) - num) / target
-	}
-	axis.Lines = newAxis
-	fmt.Println("debuging", len(newAxis))
 }
 
 // ReSample rebuild the key axis by the specified key.
-func (axis *DiscreteAxis) ReSample(dst *DiscreteAxis) {
+func (axis *DiscreteAxis) SplitReSample(dst *DiscreteAxis) {
 	srcKeys := axis.GetDiscreteKeys()
 	dstKeys := dst.GetDiscreteKeys()
 	lengthSrc := len(srcKeys)
 	lengthDst := len(dstKeys)
 	startIndex := 0
 	endIndex := 0
-	//fmt.Println("Begin", srcKeys[lengthSrc-1], lengthSrc-1, lengthDst-1)
 	for i := 1; i < lengthSrc; i++ {
 		for j := endIndex; j < lengthDst; j++ {
 			if dstKeys[j] == srcKeys[i-1] {
@@ -168,123 +137,151 @@ func (axis *DiscreteAxis) ReSample(dst *DiscreteAxis) {
 				break
 			}
 		}
-
-		//fmt.Printf("Debug[%d]: start:%v(%d) ,end:%v(%d) \n", i, []byte(dstKeys[startIndex]), startIndex, []byte(dstKeys[endIndex]), endIndex)
-		count := endIndex - startIndex
-		if count == 0 {
-			//fmt.Printf("Debug: start:%v(%d) ,end:%v(%d) \n", []byte(dstKeys[startIndex]), startIndex, []byte(dstKeys[endIndex]), endIndex)
-			continue
-		}
-		//fmt.Printf("Debug: start:%v(%d) ,end:%v(%d) \n", []byte(dstKeys[startIndex]), startIndex, []byte(dstKeys[endIndex]), endIndex)
-		newAxis := axis.Lines[i-1].Split(count)
+		splitValue := axis.Lines[i-1].Split(endIndex - startIndex)
 		for j := startIndex; j < endIndex; j++ {
-			dst.Lines[j].Merge(newAxis)
+			dst.Lines[j].Merge(splitValue)
 		}
 	}
-	//for _, line := range dst.Lines {
-	//	fmt.Printf("%#+v ", line.GetValue("write_bytes"))
-	//}
-	//fmt.Println()
 }
 
-// DeProjection project the src key-axis to dest key-axis.
-// the values dest key-axis should be 0.
-func (axis *DiscreteAxis) DeProjection(dst *DiscreteAxis) {
-	lengthSrc := len(axis.Lines)
-	lengthDst := len(dst.Lines)
+func (axis *DiscreteAxis) MergeReSample(keys DiscreteKeys) {
+	if axis.StartKey != keys[0] {
+		panic("DeNoiseByKeys requires the same startKey.")
+	}
+	newLines := make([]*Line, len(keys)-1)
+	endKey := 1
+	startIndex := 0
+	for i, line := range axis.Lines {
+		if line.EndKey == keys[endKey] {
+			newLines[endKey-1] = axis.compact(startIndex, i+1)
+			endKey++
+			startIndex = i + 1
+		}
+	}
+	axis.Lines = newLines
+}
 
-	// SrcI and DstI, the first intersecting with start lines index.
-	var DstI int
-	var SrcI int
-	if axis.StartKey < dst.StartKey {
-		DstI = 0
-		SrcI = sort.Search(lengthSrc, func(i int) bool {
-			return axis.Lines[i].EndKey >= dst.StartKey
-		})
-	} else {
-		DstI = sort.Search(lengthDst, func(i int) bool {
-			return axis.StartKey < dst.Lines[i].EndKey
-		})
+// DeNoise merge line segments below the amount of information with a specified threshold.
+// adjacent lines and the value lower than threshold can be merge to one line.
+// adjacent lines with same value can be merge to one line.
+// The return value is the number of rows after merge.
+// If `ratio` is 0, it means that only the return value is calculated and no operation is performed.
+func (axis *DiscreteAxis) DeNoise(tag ValueTag, threshold uint64, ratio int, target int) int {
+	count := 0
+	startIndex := 0
+	bucketRows := 0
+	var bucketSum uint64 = 0
+
+	var newLines []*Line
+	if ratio > 0 {
+		newLines = make([]*Line, 0, target)
 	}
 
-	startIndex := DstI
-	var endIndex int
-	for DstI < lengthDst && SrcI < lengthSrc {
-		// find the src to dest asis' projection.
-		if axis.Lines[SrcI].EndKey <= dst.Lines[DstI].EndKey {
-			endIndex = DstI
-			// find the index range, do merge.
-			for i := startIndex; i <= endIndex; i++ {
-				dst.Lines[i].Value.Merge(axis.Lines[SrcI].Value)
-			}
-			if axis.Lines[SrcI].EndKey == dst.Lines[DstI].EndKey {
-				DstI++
-				// Fixme: do not exsist multiple equal keys.
-				for DstI < lengthDst && dst.Lines[DstI].EndKey == axis.Lines[SrcI].EndKey {
-					dst.Lines[DstI].Value.Merge(axis.Lines[SrcI].Value)
-					DstI++
-				}
-				startIndex = DstI
-			} else {
-				startIndex = endIndex
-			}
-			SrcI++
+	generateBucket := func(endIndex int) {
+		if startIndex == endIndex {
+			return
+		}
+		count++
+		if ratio > 0 {
+			newLines = append(newLines, axis.compact(startIndex, endIndex))
+		}
+		startIndex = endIndex
+		bucketRows = 0
+		bucketSum = 0
+	}
+
+	bucketAdd := func(stepStartIndex, stepEndIndex int) {
+		stepValue := axis.Lines[stepStartIndex].GetValue(tag) * uint64(stepEndIndex-stepStartIndex)
+		if stepValue >= threshold {
+			generateBucket(stepStartIndex)
+		}
+		bucketRows++
+		bucketSum += stepValue
+		if (ratio > 0 && bucketRows == ratio) || bucketSum >= threshold {
+			generateBucket(stepEndIndex)
+		}
+	}
+
+	equalIndex := 0
+	for i, line := range axis.Lines {
+		if i > 0 && (ratio == 0 || line.GetValue(tag) < threshold || !line.Equal(axis.Lines[i-1].Value)) {
+			bucketAdd(equalIndex, i)
+			equalIndex = i
+		}
+	}
+	bucketAdd(equalIndex, len(axis.Lines))
+	generateBucket(len(axis.Lines))
+
+	if ratio > 0 {
+		axis.Lines = newLines
+	}
+	return count
+}
+
+func (axis *DiscreteAxis) Divide(maxRow int, tag ValueTag, zeroValue Value) DiscreteKeys {
+	if maxRow >= len(axis.Lines) {
+		return axis.GetDiscreteKeys()
+	}
+	// get upperThreshold
+	line0 := &Line{
+		EndKey: axis.Lines[0].EndKey,
+		Value:  axis.Lines[0].Clone(),
+	}
+	compactLine := axis.compact(0, len(axis.Lines))
+	upperThreshold := compactLine.GetValue(tag) + 1
+	axis.Lines[0] = line0
+	// search threshold
+	var lowerThreshold uint64 = 1
+	target := maxRow * 2 / 3
+	for lowerThreshold < upperThreshold {
+		mid := (lowerThreshold + upperThreshold) >> 1
+		if axis.DeNoise(tag, mid, 0, 0) > target {
+			lowerThreshold = mid + 1
 		} else {
-			DstI++
+			upperThreshold = mid
 		}
 	}
-}
-
-// GetDiscreteKeys returns the keys above this axis.
-func (axis *DiscreteAxis) GetDiscreteKeys() DiscreteKeys {
-	discreteKeys := make(DiscreteKeys, 0)
-	discreteKeys = append(discreteKeys, axis.StartKey)
-	for _, key := range axis.Lines {
-		discreteKeys = append(discreteKeys, key.EndKey)
-	}
-	return discreteKeys
+	threshold := lowerThreshold
+	effectRow := axis.DeNoise(tag, lowerThreshold, 0, 0)
+	ratio := len(axis.Lines)/(maxRow-effectRow) + 1
+	newAxis := axis.Clone(nil)
+	newAxis.DeNoise(tag, threshold, ratio, maxRow)
+	return newAxis.GetDiscreteKeys()
 }
 
 // Range return a key-axis with specified range.
-func (axis *DiscreteAxis) Range(startKey string, endKey string) *DiscreteAxis {
-	newAxis := &DiscreteAxis{
-		StartKey: "",
-		EndTime:  axis.EndTime,
-	}
-	if endKey <= axis.StartKey && endKey != "" {
-		return newAxis
+func (axis *DiscreteAxis) Range(startKey string, endKey string, zeroValue Value) *DiscreteAxis {
+	if endKey != "" && endKey <= axis.StartKey {
+		return NewEmptyAxis(axis.EndTime, startKey, endKey, zeroValue)
 	}
 	size := len(axis.Lines)
 	startIndex := sort.Search(size, func(i int) bool {
 		return axis.Lines[i].EndKey > startKey
 	})
 	if startIndex == size {
-		return newAxis
+		return NewEmptyAxis(axis.EndTime, startKey, endKey, zeroValue)
 	}
 
-	endIndex := sort.Search(size, func(i int) bool {
-		return axis.Lines[i].EndKey >= endKey
-	})
+	var endIndex int
 	if endKey == "" {
-		endIndex = len(axis.Lines)
+		endIndex = size
+	} else {
+		endIndex = sort.Search(size, func(i int) bool {
+			return axis.Lines[i].EndKey >= endKey
+		})
 	}
 
 	if endIndex != size {
 		endIndex++
 	}
 
+	newAxis := new(DiscreteAxis)
+	newAxis.EndTime = axis.EndTime
 	if startIndex == 0 {
 		newAxis.StartKey = axis.StartKey
 	} else {
 		newAxis.StartKey = axis.Lines[startIndex-1].EndKey
 	}
-	newAxis.Lines = make([]*Line, 0, endIndex-startIndex)
-	for i := startIndex; i < endIndex; i++ {
-		line := &Line{
-			axis.Lines[i].EndKey,
-			axis.Lines[i].Value.Clone(),
-		}
-		newAxis.Lines = append(newAxis.Lines, line)
-	}
+	newAxis.Lines = axis.Lines[startIndex:endIndex]
 	return newAxis
 }
