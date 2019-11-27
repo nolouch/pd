@@ -117,7 +117,7 @@ func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
 		zap.String("start-key", startKey),
 		zap.String("end-key", endKey),
 	)
-	matrix := s.stats.RangeMatrix(startTime, endTime, startKey, endKey, typ)
+	matrix := s.stats.RangeMatrix(startTime, endTime, startKey, endKey, GetTag(typ))
 	data, _ := json.Marshal(decorator.RangeTableID(matrix))
 	_, err := w.Write(data)
 	perr(err)

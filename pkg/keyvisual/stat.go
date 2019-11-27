@@ -23,84 +23,40 @@ import (
 	"go.uber.org/zap"
 )
 
-type regionValue struct {
+const (
+	WrittenBytesTag matrix.ValueTag = iota + 1
+	ReadBytesTag
+	WrittenKeysTag
+	ReadKeysTag
+)
+
+func GetTag(typ string) matrix.ValueTag {
+	switch typ {
+	case "written_bytes":
+		return WrittenBytesTag
+	case "read_bytes":
+		return ReadBytesTag
+	case "written_keys":
+		return WrittenKeysTag
+	case "read_keys":
+		return ReadKeysTag
+	default:
+		return WrittenBytesTag
+	}
+}
+
+type statUnit struct {
 	WrittenBytes uint64 `json:"written_bytes"`
 	ReadBytes    uint64 `json:"read_bytes"`
 	WrittenKeys  uint64 `json:"written_keys"`
 	ReadKeys     uint64 `json:"read_keys"`
 }
 
-type statUnit struct {
-	Max     regionValue `json:"max"`
-	Average regionValue `json:"average"`
-}
-
-func max(a uint64, b uint64) uint64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func newStatUnit(r *core.RegionInfo) *statUnit {
-	rValue := regionValue{
-		WrittenBytes: r.GetBytesWritten(),
-		ReadBytes:    r.GetBytesRead(),
-		WrittenKeys:  r.GetKeysWritten(),
-		ReadKeys:     r.GetKeysRead(),
-	}
-	return &statUnit{
-		Max:     rValue,
-		Average: rValue,
-	}
-}
-
-func (v *statUnit) Split(count int) matrix.Value {
-	countU64 := uint64(count)
-	res := *v
-	res.Average.ReadKeys /= countU64
-	res.Average.ReadBytes /= countU64
-	res.Average.WrittenKeys /= countU64
-	res.Average.WrittenBytes /= countU64
-	return &res
-}
-
-func (v *statUnit) GetValue(typ string) uint64 {
-
-	switch typ {
-	case "write_bytes":
-		return v.Average.WrittenBytes
-	case "read_bytes":
-		return v.Average.ReadBytes
-	case "write_keys":
-		return v.Average.WrittenBytes
-	case "read_keys":
-		return v.Average.ReadKeys
-	}
-	return v.Average.WrittenBytes
-}
-
-func (v *statUnit) Merge(other matrix.Value) {
-	v2 := other.(*statUnit)
-	v.Max.WrittenBytes = max(v.Max.WrittenBytes, v2.Max.WrittenBytes)
-	v.Max.WrittenKeys = max(v.Max.WrittenKeys, v2.Max.WrittenKeys)
-	v.Max.ReadBytes = max(v.Max.ReadBytes, v2.Max.ReadBytes)
-	v.Max.ReadKeys = max(v.Max.ReadKeys, v2.Max.ReadKeys)
-	v.Average.WrittenBytes = v.Average.WrittenBytes + v2.Average.WrittenBytes
-	v.Average.WrittenKeys = v.Average.WrittenKeys + v2.Average.WrittenKeys
-	v.Average.ReadBytes = v.Average.ReadBytes + v2.Average.ReadBytes
-	v.Average.ReadKeys = v.Average.ReadKeys + v2.Average.ReadKeys
-}
-
-func (v *statUnit) Less(threshold uint64, typ string) bool {
-	if typ == "" {
-		return max(v.Max.ReadBytes, v.Max.WrittenBytes) < threshold
-	}
-	return v.GetValue(typ) < threshold
-}
-
-func (v *statUnit) GetThreshold(typ string) uint64 {
-	return max(v.Max.ReadBytes, v.Max.WrittenBytes)
+var zeroStatUnit matrix.Value = &statUnit{
+	WrittenBytes: 0,
+	ReadBytes:    0,
+	WrittenKeys:  0,
+	ReadKeys:     0,
 }
 
 func (v *statUnit) Clone() matrix.Value {
@@ -108,17 +64,53 @@ func (v *statUnit) Clone() matrix.Value {
 	return &statUnitClone
 }
 
-func (v *statUnit) Reset() {
-	*v = statUnit{}
-}
-
-func (v *statUnit) Default() matrix.Value {
-	return new(statUnit)
-}
-
 func (v *statUnit) Equal(other matrix.Value) bool {
 	another := other.(*statUnit)
 	return *v == *another
+}
+
+func newStatUnit(r *core.RegionInfo) *statUnit {
+	return &statUnit{
+		WrittenBytes: r.GetBytesWritten(),
+		ReadBytes:    r.GetBytesRead(),
+		WrittenKeys:  r.GetKeysWritten(),
+		ReadKeys:     r.GetKeysRead(),
+	}
+}
+
+func (v *statUnit) Split(count int) matrix.Value {
+	countU64 := uint64(count)
+	res := *v
+	res.ReadKeys /= countU64
+	res.ReadBytes /= countU64
+	res.WrittenKeys /= countU64
+	res.WrittenBytes /= countU64
+	return &res
+}
+
+func (v *statUnit) GetValue(tag matrix.ValueTag) uint64 {
+	switch tag {
+	case WrittenBytesTag:
+		return v.WrittenBytes
+	case ReadBytesTag:
+		return v.ReadBytes
+	case WrittenKeysTag:
+		return v.WrittenBytes
+	case ReadKeysTag:
+		return v.ReadKeys
+	case matrix.INTEGRATION:
+		return v.ReadBytes + v.WrittenBytes
+	default:
+		return v.WrittenBytes
+	}
+}
+
+func (v *statUnit) Merge(other matrix.Value) {
+	v2 := other.(*statUnit)
+	v.WrittenBytes += v2.WrittenBytes
+	v.WrittenKeys += v2.WrittenKeys
+	v.ReadBytes += v2.ReadBytes
+	v.ReadKeys += v2.ReadKeys
 }
 
 type layerStat struct {
@@ -185,7 +177,7 @@ func (s *layerStat) Append(axis *matrix.DiscreteAxis) {
 			plane.Axes[i] = s.ring[s.head]
 			s.head = (s.head + 1) % s.len
 		}
-		compactAxis, _ := plane.Compact()
+		compactAxis, _ := plane.Compact(zeroStatUnit)
 		s.startTime = compactAxis.EndTime
 		s.nextLayerStat.Append(compactAxis)
 	}
@@ -315,12 +307,11 @@ func newDiscreteAxis(regions []*core.RegionInfo) *matrix.DiscreteAxis {
 		}
 		axis.Lines = append(axis.Lines, line)
 	}
-	// Fix me:
-	//	axis.DeNoise(1)
+	axis.DeNoise(matrix.INTEGRATION, 1, 50, 5000)
 	return axis
 }
 
-func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey string, endKey string, typ string) *matrix.Matrix {
+func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey string, endKey string, tag matrix.ValueTag) *matrix.Matrix {
 	s.RLock()
 	rangeTimePlane := s.layers[0].Range(startTime, endTime)
 	s.RUnlock()
@@ -330,11 +321,11 @@ func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey stri
 	for i := 0; i < len(rangeTimePlane.Axes); i++ {
 		tempAxis := rangeTimePlane.Axes[i]
 		if tempAxis != nil {
-			rangeTimePlane.Axes[i] = tempAxis.Range(startKey, endKey)
+			rangeTimePlane.Axes[i] = tempAxis.Range(startKey, endKey, zeroStatUnit)
 		}
 	}
 	log.Info("got range tiem plane", zap.Int("total-time-length", len(rangeTimePlane.Axes)))
-	newMatrix := rangeTimePlane.Pixel(1000, 1000, typ)
+	newMatrix := rangeTimePlane.Pixel(1500, tag, zeroStatUnit)
 	return newMatrix
 	// Fixme: use tidb
 	//return RangeTableID(newMatrix)
