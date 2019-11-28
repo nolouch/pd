@@ -30,6 +30,8 @@ const (
 	ReadKeysTag
 )
 
+const MaxDisplayY = 1500
+
 func GetTag(typ string) matrix.ValueTag {
 	switch typ {
 	case "written_bytes":
@@ -294,9 +296,13 @@ func (s *Stat) Append(regions []*core.RegionInfo) {
 }
 
 func newDiscreteAxis(regions []*core.RegionInfo) *matrix.DiscreteAxis {
+	endTime := time.Now()
+	if len(regions) == 0 {
+		return matrix.NewEmptyAxis(endTime, "", "", zeroStatUnit)
+	}
 	axis := &matrix.DiscreteAxis{
 		StartKey: string(regions[0].GetStartKey()),
-		EndTime:  time.Now(),
+		EndTime:  endTime,
 	}
 	for _, info := range regions {
 		if len(info.GetEndKey()) == 0 {
@@ -307,7 +313,8 @@ func newDiscreteAxis(regions []*core.RegionInfo) *matrix.DiscreteAxis {
 		}
 		axis.Lines = append(axis.Lines, line)
 	}
-	axis.DeNoise(matrix.INTEGRATION, 1, 50, 5000)
+	// TODO: Calculate reasonable parameters
+	// axis.DeNoise(matrix.INTEGRATION, 1, 50, 5000)
 	return axis
 }
 
@@ -318,14 +325,14 @@ func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey stri
 	if rangeTimePlane == nil {
 		return nil
 	}
+	tempMaxRow := 4 * MaxDisplayY
 	for i := 0; i < len(rangeTimePlane.Axes); i++ {
-		tempAxis := rangeTimePlane.Axes[i]
-		if tempAxis != nil {
-			rangeTimePlane.Axes[i] = tempAxis.Range(startKey, endKey, zeroStatUnit)
-		}
+		axis := rangeTimePlane.Axes[i].Range(startKey, endKey, zeroStatUnit).Clone(nil)
+		axis.DeNoise(matrix.INTEGRATION, 1, len(axis.Lines)/tempMaxRow, tempMaxRow)
+		rangeTimePlane.Axes[i] = axis
 	}
 	log.Info("got range tiem plane", zap.Int("total-time-length", len(rangeTimePlane.Axes)))
-	newMatrix := rangeTimePlane.Pixel(1500, tag, zeroStatUnit)
+	newMatrix := rangeTimePlane.Pixel(MaxDisplayY, tag, zeroStatUnit)
 	return newMatrix
 	// Fixme: use tidb
 	//return RangeTableID(newMatrix)
