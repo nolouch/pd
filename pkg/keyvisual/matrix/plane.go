@@ -15,7 +15,6 @@ package matrix
 
 import (
 	"encoding/hex"
-
 	"time"
 )
 
@@ -94,6 +93,7 @@ func (plane *DiscretePlane) Pixel(maxRow int, tag ValueTag, zeroValue Value) *Ma
 		axis := splitAxis.Clone(zeroValue)
 		plane.Axes[i].SplitReSample(axis)
 		axis.MergeReSample(keys)
+		matrix.Data[i] = make([]interface{}, keysLen)
 		for j := 0; j < keysLen; j++ {
 			matrix.Data[i][j] = axis.Lines[j].GetValue(tag)
 		}

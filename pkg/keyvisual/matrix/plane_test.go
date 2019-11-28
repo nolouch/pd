@@ -84,8 +84,24 @@ func TestDiscretePlane_Compact(t *testing.T) {
 	AssertEq(t, dstAxis, expectAxis)
 }
 
-/*
 func TestDiscretePlane_Pixel(t *testing.T) {
+	matrixEq := func(dst *Matrix, expect [][]uint64) bool {
+		if len(dst.Data) != len(expect) {
+			return false
+		}
+		for i, row := range dst.Data {
+			if len(row) != len(expect[i]) {
+				return false
+			}
+			for j, value := range row {
+				if value.(uint64) != expect[i][j] {
+					return false
+				}
+			}
+		}
+		return true
+	}
+
 	times := []int{20, 15, 10, 5, 0}
 	keys := [][]string{
 		{"b", "c", "e", "l", "m", "o"},
@@ -99,33 +115,15 @@ func TestDiscretePlane_Pixel(t *testing.T) {
 		{5, 0, 1, 6, 4},
 		{0, 3, 7, 9, 5},
 	}
-
 	plane := BuildDiscretePlane(times, keys, values)
-
-	timeN := DiscreteTimes{plane.StartTime, plane.Axes[1].EndTime, plane.Axes[3].EndTime}
-	keyM := DiscreteKeys{"", "e", "h", "i", "k", "o", "q", "r"}
-
-	uint64NM := [][]uint64{
-		{5, 6, 10, 7, 9, 0, 0},
-		{5, 3, 3, 7, 9, 6, 4},
+	dstMatrix := plane.Pixel(12, INTEGRATION, zeroValueUint64)
+	expectMatrix := [][]uint64{
+		{3, 2, 1, 1, 1, 4, 4, 0},
+		{2, 6, 10, 7, 0, 0, 0, 0},
+		{3, 0, 0, 0, 0, 0, 3, 7},
+		{0, 2, 1, 7, 6, 3, 5, 0},
 	}
-
-	expectMatrix := &Matrix{
-		Times: timeN,
-		Data:  make([][]Value, len(uint64NM)),
-		Keys:  keyM,
+	if !matrixEq(dstMatrix, expectMatrix) {
+		t.Fatalf("expect\n%v\nbut got\n%v", expectMatrix, dstMatrix)
 	}
-	for i := 0; i < len(uint64NM); i++ {
-		expectMatrix.Data[i] = make([]Value, len(uint64NM[i]))
-		for j := 0; j < len(uint64NM[i]); j++ {
-			expectMatrix.Data[i][j] = &valueUint64{uint64NM[i][j]}
-		}
-	}
-
-	n := 2
-	m := 7
-	matrix := plane.Pixel(n, m, typ)
-	if !reflect.DeepEqual(expectMatrix, matrix) {
-		t.Fatalf("expect: %v\nbut got: %v", SprintMatrix(expectMatrix), SprintMatrix(matrix))
-	}
-}*/
+}
