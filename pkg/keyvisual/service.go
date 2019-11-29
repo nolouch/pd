@@ -51,15 +51,15 @@ var (
 		{Len: 0, Ratio: 0},
 	}
 
-	defaultRegisterAPIGroupInfo = server.APIGroupInfo{
+	defaultRegisterAPIGroupInfo = server.APIGroup{
 		IsCore:  false,
-		Group:   "keyvisual",
+		Name:    "keyvisual",
 		Version: "v1",
 	}
 )
 
 // RegisterKeyvisualService register the service to pd.
-func RegisterKeyvisualService(svr *server.Server) (http.Handler, server.APIGroupInfo) {
+func RegisterKeyvisualService(svr *server.Server) (http.Handler, server.APIGroup) {
 	ctx := context.TODO()
 	mux := http.NewServeMux()
 	stats := NewStat(defaultLayersConfig)

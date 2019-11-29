@@ -16,7 +16,9 @@ package server
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/log"
@@ -24,6 +26,7 @@ import (
 	"github.com/pingcap/pd/server/config"
 	"github.com/pingcap/pd/server/schedule"
 	"github.com/pingcap/pd/server/schedule/operator"
+	"github.com/pingcap/pd/server/schedulers"
 	"github.com/pingcap/pd/server/statistics"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -36,9 +39,7 @@ const (
 	maxScheduleRetries        = 10
 	maxLoadConfigRetries      = 10
 
-	regionheartbeatSendChanCap = 1024
-	hotRegionScheduleName      = "balance-hot-region-scheduler"
-
+	heartbeatChanCapacity = 1024
 	patrolScanRegionLimit = 128 // It takes about 14 minutes to iterate 1 million regions.
 )
 
@@ -262,12 +263,13 @@ func (c *coordinator) stop() {
 type hasHotStatus interface {
 	GetHotReadStatus() *statistics.StoreHotPeersInfos
 	GetHotWriteStatus() *statistics.StoreHotPeersInfos
+	GetStoresScore() map[uint64]float64
 }
 
 func (c *coordinator) getHotWriteRegions() *statistics.StoreHotPeersInfos {
 	c.RLock()
 	defer c.RUnlock()
-	s, ok := c.schedulers[hotRegionScheduleName]
+	s, ok := c.schedulers[schedulers.HotRegionName]
 	if !ok {
 		return nil
 	}
@@ -280,7 +282,7 @@ func (c *coordinator) getHotWriteRegions() *statistics.StoreHotPeersInfos {
 func (c *coordinator) getHotReadRegions() *statistics.StoreHotPeersInfos {
 	c.RLock()
 	defer c.RUnlock()
-	s, ok := c.schedulers[hotRegionScheduleName]
+	s, ok := c.schedulers[schedulers.HotRegionName]
 	if !ok {
 		return nil
 	}
@@ -323,7 +325,7 @@ func (c *coordinator) collectHotSpotMetrics() {
 	c.RLock()
 	defer c.RUnlock()
 	// Collects hot write region metrics.
-	s, ok := c.schedulers[hotRegionScheduleName]
+	s, ok := c.schedulers[schedulers.HotRegionName]
 	if !ok {
 		return
 	}
@@ -365,6 +367,17 @@ func (c *coordinator) collectHotSpotMetrics() {
 		} else {
 			hotSpotStatusGauge.WithLabelValues(storeAddress, storeLabel, "total_read_bytes_as_leader").Set(0)
 			hotSpotStatusGauge.WithLabelValues(storeAddress, storeLabel, "hot_read_region_as_leader").Set(0)
+		}
+	}
+
+	// Collects score of stores stats metrics.
+	scores := s.Scheduler.(hasHotStatus).GetStoresScore()
+	for _, store := range stores {
+		storeAddress := store.GetAddress()
+		storeID := store.GetID()
+		score, ok := scores[storeID]
+		if ok {
+			hotSpotStatusGauge.WithLabelValues(storeAddress, strconv.FormatUint(storeID, 10), "store_score").Set(score)
 		}
 	}
 }
@@ -428,6 +441,35 @@ func (c *coordinator) removeScheduler(name string) error {
 	return err
 }
 
+func (c *coordinator) pauseOrResumeScheduler(name string, t int64) error {
+	c.Lock()
+	defer c.Unlock()
+	if c.cluster == nil {
+		return ErrNotBootstrapped
+	}
+	s := make([]*scheduleController, 0)
+	if name != "all" {
+		sc, ok := c.schedulers[name]
+		if !ok {
+			return errSchedulerNotFound
+		}
+		s = append(s, sc)
+	} else {
+		for _, sc := range c.schedulers {
+			s = append(s, sc)
+		}
+	}
+	var err error
+	for _, sc := range s {
+		var delayUntil int64 = 0
+		if t > 0 {
+			delayUntil = time.Now().Unix() + t
+		}
+		atomic.StoreInt64(&sc.delayUntil, delayUntil)
+	}
+	return err
+}
+
 func (c *coordinator) runScheduler(s *scheduleController) {
 	defer logutil.LogPanic()
 	defer c.wg.Done()
@@ -464,6 +506,7 @@ type scheduleController struct {
 	nextInterval time.Duration
 	ctx          context.Context
 	cancel       context.CancelFunc
+	delayUntil   int64
 }
 
 // newScheduleController creates a new scheduleController.
@@ -506,5 +549,11 @@ func (s *scheduleController) GetInterval() time.Duration {
 
 // AllowSchedule returns if a scheduler is allowed to schedule.
 func (s *scheduleController) AllowSchedule() bool {
-	return s.Scheduler.IsScheduleAllowed(s.cluster)
+	return s.Scheduler.IsScheduleAllowed(s.cluster) && !s.isPaused()
+}
+
+// isPaused returns if a schedueler is paused.
+func (s *scheduleController) isPaused() bool {
+	delayUntil := atomic.LoadInt64(&s.delayUntil)
+	return time.Now().Unix() < delayUntil
 }

@@ -103,14 +103,14 @@ type Server struct {
 	logProps *log.ZapProperties
 }
 
-// ServerHandlerBuilder build a server HTTP handler.
-type ServerHandlerBuilder func(*Server) (http.Handler, APIGroupInfo)
+// HandlerBuilder builds a server HTTP handler.
+type HandlerBuilder func(*Server) (http.Handler, APIGroup)
 
-// ApiGroupInfo used to regster the api service.
-type APIGroupInfo struct {
-	IsCore  bool
-	Group   string
+// APIGroup used to register the api service.
+type APIGroup struct {
+	Name    string
 	Version string
+	IsCore  bool
 }
 
 const (
@@ -120,37 +120,46 @@ const (
 	ExtensionsPath = "/pd/apis"
 )
 
-func combineBuilderServerHTTPService(svr *Server, apiBuilders ...ServerHandlerBuilder) http.Handler {
+func combineBuilderServerHTTPService(svr *Server, apiBuilders ...HandlerBuilder) (http.Handler, error) {
 	engine := negroni.New()
 	recovery := negroni.NewRecovery()
 	engine.Use(recovery)
 	router := mux.NewRouter()
 	registerMap := make(map[string]struct{})
-	for _, b := range apiBuilders {
-		h, info := b(svr)
-		var p string
+	for _, build := range apiBuilders {
+		handler, info := build(svr)
+		var pathPrefix string
 		if info.IsCore {
-			p = CorePath
+			pathPrefix = CorePath
 		} else {
-			p = path.Join(ExtensionsPath, info.Group, info.Version)
+			pathPrefix = path.Join(ExtensionsPath, info.Name, info.Version)
 		}
-		if _, ok := registerMap[p]; ok {
-			log.Warn("service already registered", zap.String("path", p))
-			continue
+		if _, ok := registerMap[pathPrefix]; ok {
+			return nil, errors.Errorf("service with path [%s] already registered", pathPrefix)
 		}
-		if !info.IsCore && (len(info.Group) == 0 || len(info.Version) == 0) {
-			log.Warn("invalid api group information", zap.Reflect("info", info))
-			continue
+		if !info.IsCore && (len(info.Name) == 0 || len(info.Version) == 0) {
+			return nil, errors.Errorf("invalid API information, group %s version %s", info.Name, info.Version)
 		}
-		log.S().Infof("Debug: %s", p)
-		router.PathPrefix(p).Handler(h)
+		log.Info("register REST path", zap.String("path", pathPrefix))
+		registerMap[pathPrefix] = struct{}{}
+		router.PathPrefix(pathPrefix).Handler(handler)
+
+		if info.IsCore {
+			// Deprecated
+			router.Path("/pd/health").Handler(handler)
+			// Deprecated
+			router.Path("/pd/diagnose").Handler(handler)
+			// Deprecated
+			router.Path("/pd/ping").Handler(handler)
+		}
 	}
+
 	engine.UseHandler(router)
-	return engine
+	return engine, nil
 }
 
 // CreateServer creates the UNINITIALIZED pd server with given configuration.
-func CreateServer(cfg *config.Config, apiBulders ...ServerHandlerBuilder) (*Server, error) {
+func CreateServer(cfg *config.Config, apiBuilders ...HandlerBuilder) (*Server, error) {
 	log.Info("PD Config", zap.Reflect("config", cfg))
 	rand.Seed(time.Now().UnixNano())
 
@@ -166,8 +175,12 @@ func CreateServer(cfg *config.Config, apiBulders ...ServerHandlerBuilder) (*Serv
 	if err != nil {
 		return nil, err
 	}
-	if len(apiBulders) != 0 {
-		apiHandler := combineBuilderServerHTTPService(s, apiBulders...)
+
+	if len(apiBuilders) != 0 {
+		apiHandler, err := combineBuilderServerHTTPService(s, apiBuilders...)
+		if err != nil {
+			return nil, err
+		}
 		etcdCfg.UserHandlers = map[string]http.Handler{
 			pdAPIPrefix: apiHandler,
 		}
@@ -754,7 +767,7 @@ func (s *Server) SetLogLevel(level string) {
 	log.Warn("log level changed", zap.String("level", log.GetLevel().String()))
 }
 
-var healthURL = "/pd/ping"
+var healthURL = "/pd/api/v1/ping"
 
 // CheckHealth checks if members are healthy.
 func (s *Server) CheckHealth(members []*pdpb.Member) map[uint64]*pdpb.Member {
