@@ -443,25 +443,3 @@ func (s *testStats) TestJson(c *C) {
 	json.Unmarshal([]byte(data), &region)
 	fmt.Println(toCoreRegion(region))
 }
-
-func toCoreRegion(aRegion api.RegionInfo) *core.RegionInfo {
-	startKey, _ := hex.DecodeString(aRegion.StartKey)
-	endKey, _ := hex.DecodeString(aRegion.EndKey)
-	meta := &metapb.Region{
-		Id:          aRegion.ID,
-		StartKey:    startKey,
-		EndKey:      endKey,
-		RegionEpoch: aRegion.RegionEpoch,
-		Peers:       aRegion.Peers,
-	}
-	return core.NewRegionInfo(meta, aRegion.Leader,
-		core.SetApproximateKeys(aRegion.ApproximateKeys),
-		core.SetApproximateSize(aRegion.ApproximateSize),
-		core.WithPendingPeers(aRegion.PendingPeers),
-		core.WithDownPeers(aRegion.DownPeers),
-		core.SetWrittenBytes(aRegion.WrittenBytes),
-		core.SetWrittenKeys(aRegion.WrittenKeys),
-		core.SetReadBytes(aRegion.ReadBytes),
-		core.SetReadKeys(aRegion.ReadKeys),
-	)
-}

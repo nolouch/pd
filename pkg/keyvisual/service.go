@@ -123,7 +123,7 @@ func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *KeyvisualService) updateStat(ctx context.Context) {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(time.Second * 5)
 	defer ticker.Stop()
 	for {
 		select {
@@ -131,10 +131,10 @@ func (s *KeyvisualService) updateStat(ctx context.Context) {
 			return
 		case <-ticker.C:
 			cluster := s.svr.GetRaftCluster()
-			if cluster == nil {
-				continue
-			}
-			regions := scanRegions(cluster)
+			//if cluster == nil {
+			//	continue
+			//}
+			regions := scanRegionsFromFile(cluster)
 			s.stats.Append(regions)
 		}
 	}
