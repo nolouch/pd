@@ -34,6 +34,8 @@ const MaxDisplayY = 1500
 
 func GetTag(typ string) matrix.ValueTag {
 	switch typ {
+	case "":
+		return matrix.INTEGRATION
 	case "written_bytes":
 		return WrittenBytesTag
 	case "read_bytes":
@@ -92,6 +94,8 @@ func (v *statUnit) Split(count int) matrix.Value {
 
 func (v *statUnit) GetValue(tag matrix.ValueTag) uint64 {
 	switch tag {
+	case matrix.INTEGRATION:
+		return v.ReadBytes + v.WrittenBytes
 	case WrittenBytesTag:
 		return v.WrittenBytes
 	case ReadBytesTag:
@@ -100,8 +104,6 @@ func (v *statUnit) GetValue(tag matrix.ValueTag) uint64 {
 		return v.WrittenBytes
 	case ReadKeysTag:
 		return v.ReadKeys
-	case matrix.INTEGRATION:
-		return v.ReadBytes + v.WrittenBytes
 	default:
 		return v.WrittenBytes
 	}
@@ -297,16 +299,16 @@ func (s *Stat) Append(regions []*core.RegionInfo) {
 
 func newDiscreteAxis(regions []*core.RegionInfo) *matrix.DiscreteAxis {
 	endTime := time.Now()
-	if len(regions) == 0 {
-		return matrix.NewEmptyAxis(endTime, "", "", zeroStatUnit)
-	}
+	//if len(regions) == 0 {
+	//	return matrix.NewEmptyAxis(endTime, "", "", zeroStatUnit)
+	//}
 	axis := &matrix.DiscreteAxis{
 		StartKey: string(regions[0].GetStartKey()),
 		EndTime:  endTime,
 	}
 	for _, info := range regions {
-		if len(info.GetEndKey()) == 0 {
-		}
+		//if len(info.GetEndKey()) == 0 {
+		//}
 		line := &matrix.Line{
 			EndKey: string(info.GetEndKey()),
 			Value:  newStatUnit(info),
@@ -318,10 +320,14 @@ func newDiscreteAxis(regions []*core.RegionInfo) *matrix.DiscreteAxis {
 	return axis
 }
 
-func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey string, endKey string, tag matrix.ValueTag) *matrix.Matrix {
+func (s *Stat) Range(startTime time.Time, endTime time.Time) *matrix.DiscretePlane {
 	s.RLock()
-	rangeTimePlane := s.layers[0].Range(startTime, endTime)
-	s.RUnlock()
+	defer s.RUnlock()
+	return s.layers[0].Range(startTime, endTime)
+}
+
+func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey string, endKey string, tag matrix.ValueTag) *matrix.Matrix {
+	rangeTimePlane := s.Range(startTime, endTime)
 	if rangeTimePlane == nil {
 		return nil
 	}
