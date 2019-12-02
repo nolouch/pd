@@ -45,10 +45,9 @@ type KeyvisualService struct {
 
 var (
 	defaultLayersConfig = LayersConfig{
-		{Len: 60 * 24, Ratio: 10},
-		{Len: 60 / 10 * 24 * 15, Ratio: 6},
-		{Len: 24 * 15, Ratio: 24},
-		{Len: 0, Ratio: 0},
+		{Len: 60 * 24, Ratio: 15},
+		{Len: 60 / 15 * 24 * 7, Ratio: 60 / 15},
+		{Len: 24 * 30, Ratio: 24},
 	}
 
 	defaultRegisterAPIGroupInfo = server.APIGroup{
