@@ -24,6 +24,7 @@ import (
 	"go.uber.org/zap"
 	"io/ioutil"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -64,8 +65,12 @@ func scanRegionsFromFile(cluster *server.RaftCluster) []*core.RegionInfo {
 	}
 	var apiRes api.RegionsInfo
 	json.Unmarshal(byteValue, &apiRes)
-	res = make([]*core.RegionInfo, len(apiRes.Regions))
-	for i, r := range apiRes.Regions {
+	regions := apiRes.Regions
+	sort.Slice(regions, func(i, j int) bool {
+		return regions[i].StartKey < regions[j].StartKey
+	})
+	res = make([]*core.RegionInfo, len(regions))
+	for i, r := range regions {
 		res[i] = toCoreRegion(r)
 	}
 	return res
