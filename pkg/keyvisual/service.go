@@ -134,6 +134,7 @@ func (s *KeyvisualService) updateStat(ctx context.Context) {
 }
 
 func (s *KeyvisualService) updateStatFromFiles(ctx context.Context) {
+	log.Info("Keyvisual load files from", zap.Time("start-time", fileNextTime))
 	now := time.Now()
 	for {
 		regions, endTime := scanRegionsFromFile()

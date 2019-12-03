@@ -51,8 +51,8 @@ func scanRegions(cluster *server.RaftCluster) ([]*core.RegionInfo, time.Time) {
 
 // read from file
 
-var fileNextTime = time.Unix(1575129600, 0) // 2019.12.01 00:00
-var fileEndTime = time.Unix(1575302400, 0)  // 2019.12.03 00:00
+var fileNextTime = time.Unix(1574992800, 0) // 2019.11.29 10:00
+var fileEndTime = time.Unix(1575129600, 0)  // 2019.12.01 00:00
 var fileTimeDelta = time.Minute
 
 func scanRegionsFromFile() ([]*core.RegionInfo, time.Time) {
