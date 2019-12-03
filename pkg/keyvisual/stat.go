@@ -157,33 +157,23 @@ func newLayerStat(ratio int, len int) *layerStat {
 
 // Append appends a key axis to layerStat.
 func (s *layerStat) Append(axis *matrix.DiscreteAxis) {
-	//if s.nextLayerStat == nil {
-	//	// the last layer do not limit the capcity.
-	//	s.ring = append(s.ring, axis)
-	//	s.tail++
-	//	s.empty = false
-	//	return
-	//}
-
 	if s.head == s.tail && !s.empty {
 		// log.S().Info(s.head, s.tail)
 		// compress data
 		if s.nextLayerStat == nil {
 			s.head = (s.head + 1) % s.len
-			s.ring[s.tail] = axis
-			s.tail = (s.tail + 1) % s.len
-			return
+		} else {
+			plane := new(matrix.DiscretePlane)
+			plane.StartTime = s.startTime
+			plane.Axes = make([]*matrix.DiscreteAxis, s.compactRatio, s.compactRatio)
+			for i := 0; i < s.compactRatio; i++ {
+				plane.Axes[i] = s.ring[s.head]
+				s.head = (s.head + 1) % s.len
+			}
+			compactAxis, _ := plane.Compact(zeroStatUnit)
+			s.startTime = compactAxis.EndTime
+			s.nextLayerStat.Append(compactAxis)
 		}
-		plane := new(matrix.DiscretePlane)
-		plane.StartTime = s.startTime
-		plane.Axes = make([]*matrix.DiscreteAxis, s.compactRatio, s.compactRatio)
-		for i := 0; i < s.compactRatio; i++ {
-			plane.Axes[i] = s.ring[s.head]
-			s.head = (s.head + 1) % s.len
-		}
-		compactAxis, _ := plane.Compact(zeroStatUnit)
-		s.startTime = compactAxis.EndTime
-		s.nextLayerStat.Append(compactAxis)
 	}
 
 	s.ring[s.tail] = axis
@@ -286,29 +276,22 @@ func NewStat(conf LayersConfig) *Stat {
 }
 
 // Append appends the all region information to statistics.
-func (s *Stat) Append(regions []*core.RegionInfo) {
+func (s *Stat) Append(regions []*core.RegionInfo, endTime time.Time) {
 	if len(regions) == 0 {
 		return
 	}
-
-	axis := newDiscreteAxis(regions)
+	axis := newDiscreteAxis(regions, endTime)
 	s.Lock()
 	defer s.Unlock()
 	s.layers[0].Append(axis)
 }
 
-func newDiscreteAxis(regions []*core.RegionInfo) *matrix.DiscreteAxis {
-	endTime := time.Now()
-	//if len(regions) == 0 {
-	//	return matrix.NewEmptyAxis(endTime, "", "", zeroStatUnit)
-	//}
+func newDiscreteAxis(regions []*core.RegionInfo, endTime time.Time) *matrix.DiscreteAxis {
 	axis := &matrix.DiscreteAxis{
 		StartKey: string(regions[0].GetStartKey()),
 		EndTime:  endTime,
 	}
 	for _, info := range regions {
-		//if len(info.GetEndKey()) == 0 {
-		//}
 		line := &matrix.Line{
 			EndKey: string(info.GetEndKey()),
 			Value:  newStatUnit(info),

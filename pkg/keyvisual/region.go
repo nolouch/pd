@@ -28,7 +28,7 @@ import (
 	"time"
 )
 
-func scanRegions(cluster *server.RaftCluster) []*core.RegionInfo {
+func scanRegions(cluster *server.RaftCluster) ([]*core.RegionInfo, time.Time) {
 	var key []byte
 	regions := make([]*core.RegionInfo, 0, 1024)
 	for {
@@ -46,38 +46,38 @@ func scanRegions(cluster *server.RaftCluster) []*core.RegionInfo {
 	}
 
 	log.Info("Update keyvisual regions", zap.Int("total-length", len(regions)))
-	return regions
+	return regions, time.Now()
 }
 
 // read from file
-func scanRegionsFromFile(cluster *server.RaftCluster) []*core.RegionInfo {
-	var res []*core.RegionInfo
-	fileName := fileNow.Format("./data/20060102-15-04.json")
-	fileNow = fileNow.Add(fileDelta)
-	jsonFile, err := os.Open(fileName)
-	if err != nil {
-		return res
-	}
-	defer jsonFile.Close()
-	byteValue, err := ioutil.ReadAll(jsonFile)
-	if err != nil {
-		return res
-	}
-	var apiRes api.RegionsInfo
-	json.Unmarshal(byteValue, &apiRes)
-	regions := apiRes.Regions
-	sort.Slice(regions, func(i, j int) bool {
-		return regions[i].StartKey < regions[j].StartKey
-	})
-	res = make([]*core.RegionInfo, len(regions))
-	for i, r := range regions {
-		res[i] = toCoreRegion(r)
-	}
-	return res
-}
 
-var fileNow = time.Unix(1575129600, 0) // 2019.12.01 00:00
-var fileDelta = time.Minute
+var fileNextTime = time.Unix(1575129600, 0) // 2019.12.01 00:00
+var fileTimeDelta = time.Minute
+
+func scanRegionsFromFile() ([]*core.RegionInfo, time.Time) {
+	var res []*core.RegionInfo
+	fileNow := fileNextTime
+	fileNextTime = fileNow.Add(fileTimeDelta)
+	fileName := fileNow.Format("./data/20060102-15-04.json")
+	jsonFile, err := os.Open(fileName)
+	if err == nil {
+		defer jsonFile.Close()
+		byteValue, err := ioutil.ReadAll(jsonFile)
+		if err == nil {
+			var apiRes api.RegionsInfo
+			json.Unmarshal(byteValue, &apiRes)
+			regions := apiRes.Regions
+			sort.Slice(regions, func(i, j int) bool {
+				return regions[i].StartKey < regions[j].StartKey
+			})
+			res = make([]*core.RegionInfo, len(regions))
+			for i, r := range regions {
+				res[i] = toCoreRegion(r)
+			}
+		}
+	}
+	return res, fileNow
+}
 
 func toCoreRegion(aRegion *api.RegionInfo) *core.RegionInfo {
 	startKey, _ := hex.DecodeString(aRegion.StartKey)

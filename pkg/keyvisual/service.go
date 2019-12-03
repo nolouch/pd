@@ -16,7 +16,6 @@ package keyvisual
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"net/http"
 	"strconv"
 	"time"
@@ -26,13 +25,6 @@ import (
 	"github.com/pingcap/pd/pkg/keyvisual/decorator"
 	"github.com/pingcap/pd/server"
 	"go.uber.org/zap"
-)
-
-var (
-	addr      = flag.String("addr", "0.0.0.0:8001", "Listening address")
-	pdAddr    = flag.String("pd", "http://127.0.0.1:2379", "PD address")
-	tidbAddr  = flag.String("tidb", "http://127.0.0.1:10080", "TiDB Address")
-	ignoreSys = flag.Bool("no-sys", true, "Ignore system database")
 )
 
 // KeyvisualService provide the service of key visual web.
@@ -81,7 +73,8 @@ func RegisterKeyvisualService(svr *server.Server) (http.Handler, server.APIGroup
 }
 
 func (s *KeyvisualService) Run() {
-	go s.updateStat(s.ctx)
+	// TODO: Need to change back to `go s.updateStat(s.ctx)` before merge
+	go s.updateStatFromFiles(s.ctx)
 }
 
 func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +116,7 @@ func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *KeyvisualService) updateStat(ctx context.Context) {
-	ticker := time.NewTicker(time.Second * 5)
+	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
@@ -131,11 +124,25 @@ func (s *KeyvisualService) updateStat(ctx context.Context) {
 			return
 		case <-ticker.C:
 			cluster := s.svr.GetRaftCluster()
-			//if cluster == nil {
-			//	continue
-			//}
-			regions := scanRegionsFromFile(cluster)
-			s.stats.Append(regions)
+			if cluster == nil {
+				continue
+			}
+			regions, endTime := scanRegions(cluster)
+			s.stats.Append(regions, endTime)
+		}
+	}
+}
+
+func (s *KeyvisualService) updateStatFromFiles(ctx context.Context) {
+	ticker := time.NewTicker(time.Second * 5)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			regions, endTime := scanRegionsFromFile()
+			s.stats.Append(regions, endTime)
 		}
 	}
 }
