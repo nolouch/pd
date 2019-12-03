@@ -312,7 +312,7 @@ func (s *Stat) Range(startTime time.Time, endTime time.Time) *matrix.DiscretePla
 func (s *Stat) RangeMatrix(startTime time.Time, endTime time.Time, startKey string, endKey string, tag matrix.ValueTag) *matrix.Matrix {
 	rangeTimePlane := s.Range(startTime, endTime)
 	if rangeTimePlane == nil {
-		return nil
+		rangeTimePlane = matrix.NewEmptyPlane(startTime, endTime, startKey, endKey, zeroStatUnit)
 	}
 	tempMaxRow := 4 * MaxDisplayY
 	for i := 0; i < len(rangeTimePlane.Axes); i++ {
