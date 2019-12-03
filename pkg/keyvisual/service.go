@@ -134,15 +134,14 @@ func (s *KeyvisualService) updateStat(ctx context.Context) {
 }
 
 func (s *KeyvisualService) updateStatFromFiles(ctx context.Context) {
-	ticker := time.NewTicker(time.Second * 5)
-	defer ticker.Stop()
+	now := time.Now()
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			regions, endTime := scanRegionsFromFile()
-			s.stats.Append(regions, endTime)
+		regions, endTime := scanRegionsFromFile()
+		newTime := now.Add(endTime.Sub(fileEndTime))
+		s.stats.Append(regions, newTime)
+		if endTime.After(fileEndTime) {
+			break
 		}
 	}
+	log.Info("Keyvisual load all files")
 }

@@ -131,8 +131,7 @@ func (axis *DiscreteAxis) SplitReSample(dst *DiscreteAxis) {
 		for j := endIndex; j < lengthDst; j++ {
 			if dstKeys[j] == srcKeys[i-1] {
 				startIndex = j
-			}
-			if dstKeys[j] == srcKeys[i] {
+			} else if dstKeys[j] == srcKeys[i] {
 				endIndex = j
 				break
 			}
