@@ -144,5 +144,6 @@ func (s *KeyvisualService) updateStatFromFiles(ctx context.Context) {
 			break
 		}
 	}
+	log.Info("Keyvisual load files to", zap.Time("end-time", fileNextTime))
 	log.Info("Keyvisual load all files")
 }
