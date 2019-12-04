@@ -16,7 +16,6 @@ package keyvisual
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"net/http"
 	"strconv"
 	"time"
@@ -26,13 +25,6 @@ import (
 	"github.com/pingcap/pd/pkg/keyvisual/decorator"
 	"github.com/pingcap/pd/server"
 	"go.uber.org/zap"
-)
-
-var (
-	addr      = flag.String("addr", "0.0.0.0:8001", "Listening address")
-	pdAddr    = flag.String("pd", "http://127.0.0.1:2379", "PD address")
-	tidbAddr  = flag.String("tidb", "http://127.0.0.1:10080", "TiDB Address")
-	ignoreSys = flag.Bool("no-sys", true, "Ignore system database")
 )
 
 // KeyvisualService provide the service of key visual web.
@@ -81,7 +73,8 @@ func RegisterKeyvisualService(svr *server.Server) (http.Handler, server.APIGroup
 }
 
 func (s *KeyvisualService) Run() {
-	go s.updateStat(s.ctx)
+	// TODO: Need to change back to `go s.updateStat(s.ctx)` before merge
+	go s.updateStatFromFiles(s.ctx)
 }
 
 func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
@@ -134,8 +127,23 @@ func (s *KeyvisualService) updateStat(ctx context.Context) {
 			if cluster == nil {
 				continue
 			}
-			regions := scanRegions(cluster)
-			s.stats.Append(regions)
+			regions, endTime := scanRegions(cluster)
+			s.stats.Append(regions, endTime)
 		}
 	}
+}
+
+func (s *KeyvisualService) updateStatFromFiles(ctx context.Context) {
+	log.Info("Keyvisual load files from", zap.Time("start-time", fileNextTime))
+	now := time.Now()
+	for {
+		regions, endTime := scanRegionsFromFile()
+		newTime := now.Add(endTime.Sub(fileEndTime))
+		s.stats.Append(regions, newTime)
+		if endTime.After(fileEndTime) {
+			break
+		}
+	}
+	log.Info("Keyvisual load files to", zap.Time("end-time", fileNextTime))
+	log.Info("Keyvisual load all files")
 }
