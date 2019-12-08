@@ -148,7 +148,7 @@ func (c *chunk) SetValues(values []uint64) {
 
 // Set all values to 0
 func (c *chunk) Clear() {
-	Memset(c.Values, 0)
+	MemsetUint64(c.Values, 0)
 }
 
 // Calculation

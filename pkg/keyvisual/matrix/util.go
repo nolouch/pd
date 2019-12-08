@@ -15,7 +15,18 @@ package matrix
 
 import "sort"
 
-func Memset(slice []uint64, v uint64) {
+func MemsetUint64(slice []uint64, v uint64) {
+	sliceLen := len(slice)
+	if sliceLen == 0 {
+		return
+	}
+	slice[0] = v
+	for bp := 1; bp < sliceLen; bp <<= 1 {
+		copy(slice[bp:], slice[:bp])
+	}
+}
+
+func MemsetInt(slice []int, v int) {
 	sliceLen := len(slice)
 	if sliceLen == 0 {
 		return
@@ -33,7 +44,13 @@ func GetLastKey(keys []string) string {
 // Check `part` keys part of `src` keys
 // Ps: Just make simple judgments
 func CheckPartOf(src, part []string) {
-	if src[0] != part[0] || GetLastKey(src) != GetLastKey(part) || len(src) < len(part) {
+	err := src[0] > part[0] || len(src) < len(part)
+	srcLastKey := GetLastKey(src)
+	partLastKey := GetLastKey(part)
+	if srcLastKey != "" && (partLastKey == "" || srcLastKey < partLastKey) {
+		err = true
+	}
+	if err {
 		panic("The inclusion relationship is not satisfied between keys")
 	}
 }
@@ -51,4 +68,20 @@ func MakeKeys(keySet map[string]struct{}, unlimitedEnd bool) []string {
 		keys = append(keys, "")
 	}
 	return keys
+}
+
+// Max returns the larger of a and b.
+func Max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// Min returns the smaller of a and b.
+func Min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
