@@ -92,31 +92,36 @@ func updateTables() {
 	}
 }
 
-//RangeTableID generate the matrix according the table info.
-//  Fixme: the label information should get from tidb.
-func RangeTableID(newMatrix *matrix.Matrix) *matrix.Matrix {
-	keys := newMatrix.Keys
-	for i := 0; i < len(keys)-1; i++ {
-		key := keys[i].Key
-		keyBytes, err := hex.DecodeString(key)
-		if err != nil {
-			perr(err)
-			continue
-		}
-		decodeKey := codec.Key(keyBytes)
+// TiDBLabelStrategy implements the LabelStrategy interface. Get Label Information from TiDB.
+type TiDBLabelStrategy struct{}
 
-		isMeta, TableID := decodeKey.MetaOrTable()
-		if isMeta {
-			keys[i].Labels = append(keys[i].Labels, "meta")
-			continue
-		}
-		keys[i].Labels = append(keys[i].Labels, fmt.Sprintf("table_%d", TableID))
+func (_ TiDBLabelStrategy) CrossBorder(startKey, endKey string) bool {
+	// TODO: Unsafe conversion
+	startBytes, endBytes := []byte(startKey), []byte(endKey)
+	startIsMeta, startTableID := codec.Key(startBytes).MetaOrTable()
+	endIsMeta, endTableID := codec.Key(endBytes).MetaOrTable()
+	if startIsMeta || endIsMeta {
+		return startIsMeta != endIsMeta
+	}
+	return startTableID != endTableID
+}
+
+// Fixme: the label information should get from tidb.
+func (_ TiDBLabelStrategy) Label(key string) (label matrix.LabelKey) {
+	// TODO: Unsafe conversion
+	keyBytes := []byte(key)
+	label.Key = hex.EncodeToString(keyBytes)
+	decodeKey := codec.Key(keyBytes)
+	isMeta, TableID := decodeKey.MetaOrTable()
+	if isMeta {
+		label.Labels = append(label.Labels, "meta")
+	} else {
+		label.Labels = append(label.Labels, fmt.Sprintf("table_%d", TableID))
 		if rowID := decodeKey.RowID(); rowID != 0 {
-			keys[i].Labels = append(keys[i].Labels, fmt.Sprintf("row_%d", rowID))
-		}
-		if indexID := decodeKey.IndexID(); indexID != 0 {
-			keys[i].Labels = append(keys[i].Labels, fmt.Sprintf("index_%d", indexID))
+			label.Labels = append(label.Labels, fmt.Sprintf("row_%d", rowID))
+		} else if indexID := decodeKey.IndexID(); indexID != 0 {
+			label.Labels = append(label.Labels, fmt.Sprintf("index_%d", indexID))
 		}
 	}
-	return newMatrix
+	return
 }
