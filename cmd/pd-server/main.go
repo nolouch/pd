@@ -91,7 +91,7 @@ func main() {
 	if err != nil {
 		log.Fatal("join meet error", zap.Error(err))
 	}
-	svr, err := server.CreateServer(cfg, api.NewHandler, keyvisual.RegisterKeyvisualService)
+	svr, err := server.CreateServer(cfg, api.NewHandler, keyvisual.RegisterService)
 	if err != nil {
 		log.Fatal("create server failed", zap.Error(err))
 	}

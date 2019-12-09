@@ -14,29 +14,136 @@
 package keyvisual
 
 import (
-	"encoding/hex"
-	"encoding/json"
-	"github.com/pingcap/kvproto/pkg/metapb"
+	"reflect"
+	"time"
+	"unsafe"
+
 	"github.com/pingcap/log"
+	"github.com/pingcap/pd/pkg/keyvisual/matrix"
 	"github.com/pingcap/pd/server"
-	"github.com/pingcap/pd/server/api"
 	"github.com/pingcap/pd/server/core"
 	"go.uber.org/zap"
-	"io/ioutil"
-	"os"
-	"sort"
-	"time"
 )
+
+type statTag int
+
+const (
+	WrittenBytesTag statTag = iota
+	ReadBytesTag
+	WrittenKeysTag
+	ReadKeysTag
+	IntegrationTag
+)
+
+const valuesListLen = 4
+
+func getTag(typ string) statTag {
+	switch typ {
+	case "":
+		return IntegrationTag
+	case "written_bytes":
+		return WrittenBytesTag
+	case "read_bytes":
+		return ReadBytesTag
+	case "written_keys":
+		return WrittenKeysTag
+	case "read_keys":
+		return ReadKeysTag
+	default:
+		return WrittenBytesTag
+	}
+}
+
+// Fixme: StartKey may not be equal to the EndKey of the previous region
+func getKeys(regions []*core.RegionInfo) []string {
+	keys := make([]string, len(regions)+1)
+	keys[0] = String(regions[0].GetStartKey())
+	endKeys := keys[1:]
+	for i, region := range regions {
+		endKeys[i] = String(region.GetEndKey())
+	}
+	return keys
+}
+
+func getValues(regions []*core.RegionInfo, tag statTag) []uint64 {
+	values := make([]uint64, len(regions))
+	switch tag {
+	case WrittenBytesTag:
+		for i, region := range regions {
+			values[i] = region.GetBytesWritten()
+		}
+	case ReadBytesTag:
+		for i, region := range regions {
+			values[i] = region.GetBytesRead()
+		}
+	case WrittenKeysTag:
+		for i, region := range regions {
+			values[i] = region.GetKeysWritten()
+		}
+	case ReadKeysTag:
+		for i, region := range regions {
+			values[i] = region.GetKeysRead()
+		}
+	case IntegrationTag:
+		for i, region := range regions {
+			values[i] = region.GetBytesWritten() + region.GetBytesRead()
+		}
+	default:
+		panic("unreachable")
+	}
+	return values
+}
+
+func filter(axis *matrix.Axis, tags ...statTag) matrix.Axis {
+	valuesList := make([][]uint64, len(tags))
+	for i, tag := range tags {
+		var values []uint64
+		switch tag {
+		case WrittenBytesTag:
+			values = axis.ValuesList[0]
+		case ReadBytesTag:
+			values = axis.ValuesList[1]
+		case WrittenKeysTag:
+			values = axis.ValuesList[2]
+		case ReadKeysTag:
+			values = axis.ValuesList[3]
+		case IntegrationTag:
+			values = make([]uint64, len(axis.ValuesList[0]))
+			for j := range values {
+				values[j] = axis.ValuesList[0][j] + axis.ValuesList[1][j]
+			}
+		}
+		valuesList[i] = values
+	}
+	return matrix.CreateAxis(axis.Keys, valuesList...)
+}
+
+// TODO: pre-compact based on IntegrationTag
+func toAxis(regions []*core.RegionInfo) matrix.Axis {
+	regionsLen := len(regions)
+	if regionsLen <= 0 {
+		panic("At least one RegionInfo")
+	}
+	keys := getKeys(regions)
+	valuesList := make([][]uint64, valuesListLen)
+	valuesList[0] = getValues(regions, WrittenBytesTag)
+	valuesList[1] = getValues(regions, ReadBytesTag)
+	valuesList[2] = getValues(regions, WrittenKeysTag)
+	valuesList[3] = getValues(regions, ReadKeysTag)
+	return matrix.CreateAxis(keys, valuesList...)
+}
 
 func scanRegions(cluster *server.RaftCluster) ([]*core.RegionInfo, time.Time) {
 	var key []byte
 	regions := make([]*core.RegionInfo, 0, 1024)
+
 	for {
 		rs := cluster.ScanRegions(key, []byte(""), 1024)
 		length := len(rs)
 		if length == 0 {
 			break
 		}
+
 		regions = append(regions, rs...)
 
 		key = rs[length-1].GetEndKey()
@@ -45,59 +152,17 @@ func scanRegions(cluster *server.RaftCluster) ([]*core.RegionInfo, time.Time) {
 		}
 	}
 
-	log.Info("Update keyvisual regions", zap.Int("total-length", len(regions)))
+	log.Info("Update key visual regions", zap.Int("total-length", len(regions)))
 	return regions, time.Now()
 }
 
-// read from file
-
-var fileNextTime = time.Unix(1574992800, 0) // 2019.11.29 10:00
-var fileEndTime = time.Unix(1575064800, 0)  // 2019.11.30 06:00
-var fileTimeDelta = time.Minute
-
-func scanRegionsFromFile() ([]*core.RegionInfo, time.Time) {
-	var res []*core.RegionInfo
-	fileNow := fileNextTime
-	fileNextTime = fileNow.Add(fileTimeDelta)
-	fileName := fileNow.Format("./data/20060102-15-04.json")
-	jsonFile, err := os.Open(fileName)
-	if err == nil {
-		defer jsonFile.Close()
-		byteValue, err := ioutil.ReadAll(jsonFile)
-		if err == nil {
-			var apiRes api.RegionsInfo
-			json.Unmarshal(byteValue, &apiRes)
-			regions := apiRes.Regions
-			sort.Slice(regions, func(i, j int) bool {
-				return regions[i].StartKey < regions[j].StartKey
-			})
-			res = make([]*core.RegionInfo, len(regions))
-			for i, r := range regions {
-				res[i] = toCoreRegion(r)
-			}
-		}
+func String(b []byte) (s string) {
+	if len(b) == 0 {
+		return ""
 	}
-	return res, fileNow
-}
-
-func toCoreRegion(aRegion *api.RegionInfo) *core.RegionInfo {
-	startKey, _ := hex.DecodeString(aRegion.StartKey)
-	endKey, _ := hex.DecodeString(aRegion.EndKey)
-	meta := &metapb.Region{
-		Id:          aRegion.ID,
-		StartKey:    startKey,
-		EndKey:      endKey,
-		RegionEpoch: aRegion.RegionEpoch,
-		Peers:       aRegion.Peers,
-	}
-	return core.NewRegionInfo(meta, aRegion.Leader,
-		core.SetApproximateKeys(aRegion.ApproximateKeys),
-		core.SetApproximateSize(aRegion.ApproximateSize),
-		core.WithPendingPeers(aRegion.PendingPeers),
-		core.WithDownPeers(aRegion.DownPeers),
-		core.SetWrittenBytes(aRegion.WrittenBytes),
-		core.SetWrittenKeys(aRegion.WrittenKeys),
-		core.SetReadBytes(aRegion.ReadBytes),
-		core.SetReadKeys(aRegion.ReadKeys),
-	)
+	pbytes := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	pstring := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	pstring.Data = pbytes.Data
+	pstring.Len = pbytes.Len
+	return
 }
