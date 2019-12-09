@@ -75,14 +75,21 @@ func (s *distanceStrategy) End() {
 func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
+	srcKeys := src.Keys
 	srcValues := src.Values
-	CheckPartOf(dstKeys, src.Keys)
+	CheckPartOf(dstKeys, srcKeys)
+
+	if len(dstKeys) == len(srcKeys) {
+		dst.SetValues(src.Values)
+		return
+	}
+
 	start := 0
-	for startKey := src.Keys[0]; dstKeys[start] != startKey; start++ {
+	for startKey := srcKeys[0]; dstKeys[start] != startKey; start++ {
 	}
 	end := start + 1
 	scale := s.Scale
-	for i, key := range src.Keys[1:] {
+	for i, key := range srcKeys[1:] {
 		for dstKeys[end] != key {
 			end++
 		}
@@ -97,14 +104,23 @@ func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int) {
 func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
+	srcKeys := src.Keys
 	srcValues := src.Values
-	CheckPartOf(dstKeys, src.Keys)
+	CheckPartOf(dstKeys, srcKeys)
+
+	if len(dstKeys) == len(srcKeys) {
+		for i, v := range srcValues {
+			dstValues[i] += v
+		}
+		return
+	}
+
 	start := 0
-	for startKey := src.Keys[0]; dstKeys[start] != startKey; start++ {
+	for startKey := srcKeys[0]; dstKeys[start] != startKey; start++ {
 	}
 	end := start + 1
 	scale := s.Scale
-	for i, key := range src.Keys[1:] {
+	for i, key := range srcKeys[1:] {
 		for dstKeys[end] != key {
 			end++
 		}

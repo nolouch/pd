@@ -95,6 +95,10 @@ func (axis *Axis) Range(startKey string, endKey string) Axis {
 }
 
 func (axis *Axis) Focus(strategy Strategy, threshold uint64, ratio int, target int) Axis {
+	if target >= len(axis.Keys)-1 {
+		return *axis
+	}
+
 	baseChunk := createChunk(axis.Keys, axis.ValuesList[0])
 	newChunk := baseChunk.Focus(strategy, threshold, ratio, target)
 	valuesListLen := len(axis.ValuesList)
@@ -152,15 +156,17 @@ func (c *chunk) Clear() {
 
 // Generate new chunks based on the more sparse newKeys
 func (c *chunk) Reduce(newKeys []string) chunk {
-	CheckPartOf(c.Keys, newKeys)
-	if len(c.Keys) == len(newKeys) {
+	keys := c.Keys
+	CheckPartOf(keys, newKeys)
+	if len(keys) == len(newKeys) {
 		return *c
 	}
+
 	newValues := make([]uint64, len(newKeys)-1)
 	endKeys := newKeys[1:]
 	j := 0
 	for i, value := range c.Values {
-		if c.Keys[i] == endKeys[j] {
+		if keys[i] == endKeys[j] {
 			j++
 		}
 		newValues[j] += value
