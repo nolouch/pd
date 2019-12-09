@@ -131,10 +131,12 @@ func (s *distanceStrategy) GenerateScale(dis []int, keys, compactKeys []string, 
 		} else {
 			// copy tempDis and calculate the top n levels
 			tempDis = append(tempDis[:0], dis[start:end]...)
+			tempLen := len(tempDis)
 			sort.Ints(tempDis)
 			level := 0
 			tempMap[tempDis[0]] = 1
-			for i, d := range tempDis {
+			for i := 1; i < tempLen; i++ {
+				d := tempDis[i]
 				if d != tempDis[i-1] {
 					level++
 					if level == s.SplitLevel {

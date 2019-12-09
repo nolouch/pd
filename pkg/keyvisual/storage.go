@@ -29,6 +29,7 @@ type LayerConfig struct {
 
 type layerStat struct {
 	StartTime time.Time
+	EndTime   time.Time
 	RingAxes  []matrix.Axis
 	RingTimes []time.Time
 	Head      int
@@ -44,6 +45,7 @@ type layerStat struct {
 func newLayerStat(conf LayerConfig, strategy matrix.Strategy, startTime time.Time) *layerStat {
 	return &layerStat{
 		StartTime: startTime,
+		EndTime:   startTime,
 		RingAxes:  make([]matrix.Axis, conf.Len),
 		RingTimes: make([]time.Time, conf.Len),
 		Head:      0,
@@ -88,6 +90,7 @@ func (s *layerStat) Append(axis matrix.Axis, endTime time.Time) {
 	s.RingAxes[s.Tail] = axis
 	s.RingTimes[s.Tail] = endTime
 	s.Empty = false
+	s.EndTime = endTime
 	s.Tail = (s.Tail + 1) % s.Len
 }
 
@@ -96,13 +99,10 @@ func (s *layerStat) Range(startTime, endTime time.Time, times []time.Time, axes 
 	if s.Next != nil {
 		times, axes = s.Next.Range(startTime, endTime, times, axes)
 	}
-
 	if s.Empty {
 		return times, axes
 	}
-
-	layerEndTime := s.RingTimes[s.Tail]
-	if !(startTime.Before(layerEndTime) && endTime.After(s.StartTime)) {
+	if !(startTime.Before(s.EndTime) && endTime.After(s.StartTime)) {
 		return times, axes
 	}
 
@@ -181,12 +181,15 @@ func (s *Stat) Append(regions []*core.RegionInfo, endTime time.Time) {
 	s.layers[0].Append(axis, endTime)
 }
 
-func (s *Stat) Range(startTime, endTime time.Time, startKey, endKey string, tags ...statTag) matrix.Plane {
+func (s *Stat) Range(startTime, endTime time.Time) (times []time.Time, axes []matrix.Axis) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	var times []time.Time
-	var axes []matrix.Axis
 	times, axes = s.layers[0].Range(startTime, endTime, times, axes)
+	return
+}
+
+func (s *Stat) RangePlane(startTime, endTime time.Time, startKey, endKey string, tags ...statTag) matrix.Plane {
+	times, axes := s.Range(startTime, endTime)
 	if len(times) <= 1 {
 		return matrix.CreateEmptyPlane(startTime, endTime, startKey, endKey, len(tags))
 	}

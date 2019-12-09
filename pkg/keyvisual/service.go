@@ -116,7 +116,7 @@ func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
 	)
 
 	// Fixme: Remove the test IntegrationTag.
-	plane := s.stats.Range(startTime, endTime, startKey, endKey, IntegrationTag, getTag(typ))
+	plane := s.stats.RangePlane(startTime, endTime, startKey, endKey, IntegrationTag, getTag(typ))
 	mx := plane.Pixel(s.strategy, maxDisplayY)
 
 	data, _ := json.Marshal(&mx)
