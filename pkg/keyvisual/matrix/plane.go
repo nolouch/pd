@@ -1,4 +1,4 @@
-// Copyright 201 PingCAP, Inc.
+// Copyright 2019 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,109 +14,97 @@
 package matrix
 
 import (
-	"encoding/hex"
 	"time"
 )
 
-type DiscretePlane struct {
-	StartTime time.Time
-	Axes      []*DiscreteAxis
+type Plane struct {
+	// len(Times) == len(Axes) + 1
+	Times []time.Time
+	Axes  []Axis
 }
 
-type DiscreteTimes []time.Time
-
-// LabelKey labels the key.
-type LabelKey struct {
-	Key    string   `json:"key"`
-	Labels []string `json:"labels"`
-}
-
-type Matrix struct {
-	Data  [][]interface{} `json:"values"`   // data of the matrix
-	Keys  []LabelKey      `json:"keyAxis"`  // key-axis
-	Times []int64         `json:"timeAxis"` // time-axis
-}
-
-func NewEmptyPlane(startTime, endTime time.Time, startKey, endKey string, zeroValue Value) *DiscretePlane {
-	return &DiscretePlane{
-		StartTime: startTime,
-		Axes: []*DiscreteAxis{
-			NewEmptyAxis(endTime, startKey, endKey, zeroValue),
-		},
+func CreatePlane(times []time.Time, axes []Axis) Plane {
+	if len(times) <= 1 {
+		panic("Times length must be greater than 1")
+	}
+	return Plane{
+		Times: times,
+		Axes:  axes,
 	}
 }
 
-// GetDiscreteTimes gets all times.
-func (plane *DiscretePlane) GetDiscreteTimes() DiscreteTimes {
-	discreteTimes := make(DiscreteTimes, len(plane.Axes)+1)
-	discreteTimes[0] = plane.StartTime
+func CreateEmptyPlane(startTime, endTime time.Time, startKey, endKey string, valuesListLen int) Plane {
+	return CreatePlane([]time.Time{startTime, endTime}, []Axis{CreateEmptyAxis(startKey, endKey, valuesListLen)})
+}
+
+func (plane *Plane) Compact(strategy Strategy) Axis {
+	chunks := make([]chunk, len(plane.Axes))
 	for i, axis := range plane.Axes {
-		discreteTimes[i+1] = axis.EndTime
+		chunks[i] = createChunk(axis.Keys, axis.ValuesList[0])
 	}
-	return discreteTimes
+	compactChunk := compact(strategy, chunks)
+	valuesListLen := len(plane.Axes[0].ValuesList)
+	valuesList := make([][]uint64, valuesListLen)
+	valuesList[0] = compactChunk.Values
+	for j := 1; j < valuesListLen; j++ {
+		compactChunk.SetZeroValues()
+		for i, axis := range plane.Axes {
+			chunks[i].SetValues(axis.ValuesList[j])
+			strategy.SplitAdd(compactChunk, chunks[i], i)
+		}
+		valuesList[j] = compactChunk.Values
+	}
+	strategy.End()
+	return CreateAxis(compactChunk.Keys, valuesList)
 }
 
-// Compact compacts multiple key axes into one axis.
-func (plane *DiscretePlane) Compact(zeroValue Value) (*DiscreteAxis, time.Time) {
-	keySet := make(map[string]struct{})
-	endUnlimited := false
-	for _, axis := range plane.Axes {
-		keys := axis.GetDiscreteKeys()
-		for _, key := range keys {
-			keySet[key] = struct{}{}
+func (plane *Plane) Pixel(strategy Strategy, target int, displayTags []string) Matrix {
+	valuesListLen := len(plane.Axes[0].ValuesList)
+	if valuesListLen != len(displayTags) {
+		panic("the length of displayTags and valuesList should be equal")
+	}
+	axesLen := len(plane.Axes)
+	chunks := make([]chunk, axesLen)
+	for i, axis := range plane.Axes {
+		chunks[i] = createChunk(axis.Keys, axis.ValuesList[0])
+	}
+	compactChunk := compact(strategy, chunks)
+	baseKeys := compactChunk.Divide(strategy, target)
+	matrix := createMatrix(strategy, plane.Times, baseKeys, valuesListLen)
+	for j := 0; j < valuesListLen; j++ {
+		data := make([][]uint64, axesLen)
+		for i, axis := range plane.Axes {
+			compactChunk.Clear()
+			chunks[i].SetValues(axis.ValuesList[j])
+			strategy.SplitTo(compactChunk, chunks[i], i)
+			data[i] = compactChunk.Reduce(baseKeys).Values
 		}
-		if keys[len(keys)-1] == "" {
-			endUnlimited = true
-		}
+		matrix.DataMap[displayTags[j]] = data
 	}
-	newAxis := NewZeroAxis(plane.Axes[len(plane.Axes)-1].EndTime, keySet, endUnlimited, zeroValue)
-	for _, axis := range plane.Axes {
-		axis.SplitReSample(newAxis)
-	}
-	return newAxis, plane.StartTime
-}
-
-func (plane *DiscretePlane) Pixel(maxRow int, tag ValueTag, zeroValue Value) *Matrix {
-	// get splitAxis and merged DiscreteKeys
-	splitAxis, _ := plane.Compact(zeroValue)
-	keys := splitAxis.Divide(maxRow, tag, zeroValue)
-	// generate Matrix
-	keysLen := len(keys) - 1
-	times := plane.GetDiscreteTimes()
-	timesLen := len(times) - 1
-	matrix := &Matrix{
-		Data:  make([][]interface{}, timesLen),
-		Keys:  collectLabelKeys(keys),
-		Times: collectUnixTimes(times),
-	}
-	for i := 0; i < timesLen; i++ {
-		axis := splitAxis.Clone(zeroValue)
-		plane.Axes[i].SplitReSample(axis)
-		axis.MergeReSample(keys)
-		matrix.Data[i] = make([]interface{}, keysLen)
-		for j := 0; j < keysLen; j++ {
-			matrix.Data[i][j] = axis.Lines[j].GetValue(tag)
-		}
-	}
+	strategy.End()
 	return matrix
 }
 
-func collectLabelKeys(keys DiscreteKeys) []LabelKey {
-	newKeys := make([]LabelKey, len(keys))
-	for i, key := range keys {
-		// TODO: Parse from label
-		newKeys[i] = LabelKey{
-			Key:    hex.EncodeToString([]byte(key)),
-			Labels: []string{},
+func compact(strategy Strategy, chunks []chunk) chunk {
+	// get compact chunk keys
+	keySet := make(map[string]struct{})
+	unlimitedEnd := false
+	for _, c := range chunks {
+		end := len(c.Keys) - 1
+		endKey := c.Keys[end]
+		if endKey == "" {
+			unlimitedEnd = true
+		} else {
+			keySet[endKey] = struct{}{}
+		}
+		for _, key := range c.Keys[:end] {
+			keySet[key] = struct{}{}
 		}
 	}
-	return newKeys
-}
-
-func collectUnixTimes(times DiscreteTimes) []int64 {
-	res := make([]int64, len(times))
-	for i, t := range times {
-		res[i] = t.Unix()
+	compactChunk := createZeroChunk(MakeKeys(keySet, unlimitedEnd))
+	strategy.Start(chunks, compactChunk.Keys)
+	for i, c := range chunks {
+		strategy.SplitAdd(compactChunk, c, i)
 	}
-	return res
+	return compactChunk
 }

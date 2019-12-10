@@ -16,6 +16,7 @@ package keyvisual
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -23,23 +24,18 @@ import (
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 	"github.com/pingcap/log"
 	"github.com/pingcap/pd/pkg/keyvisual/decorator"
+	"github.com/pingcap/pd/pkg/keyvisual/matrix"
 	"github.com/pingcap/pd/server"
 	"go.uber.org/zap"
 )
 
-// KeyvisualService provide the service of key visual web.
-type KeyvisualService struct {
-	*http.ServeMux
-	ctx   context.Context
-	svr   *server.Server
-	stats *Stat
-}
+const maxDisplayY = 1500
 
 var (
 	defaultLayersConfig = LayersConfig{
 		{Len: 60 * 24, Ratio: 15},
 		{Len: 60 / 15 * 24 * 7, Ratio: 60 / 15},
-		{Len: 24 * 30, Ratio: 24},
+		{Len: 24 * 30, Ratio: 0},
 	}
 
 	defaultRegisterAPIGroupInfo = server.APIGroup{
@@ -49,16 +45,26 @@ var (
 	}
 )
 
-// RegisterKeyvisualService register the service to pd.
-func RegisterKeyvisualService(svr *server.Server) (http.Handler, server.APIGroup) {
-	ctx := context.TODO()
-	mux := http.NewServeMux()
-	stats := NewStat(defaultLayersConfig)
-	k := &KeyvisualService{
-		ServeMux: mux,
-		ctx:      ctx,
+// Service provide the service of key visual web.
+type Service struct {
+	*http.ServeMux
+	ctx      context.Context
+	svr      *server.Server
+	stats    *Stat
+	strategy matrix.Strategy
+}
+
+// RegisterService register the key visual service to pd.
+func RegisterService(svr *server.Server) (http.Handler, server.APIGroup) {
+	labelStrategy := matrix.LabelStrategy(decorator.TiDBLabelStrategy{})
+	// strategy := matrix.AverageStrategy(labelStrategy)
+	strategy := matrix.DistanceStrategy(labelStrategy, math.Phi, 15)
+	k := &Service{
+		ServeMux: http.NewServeMux(),
+		ctx:      context.TODO(),
 		svr:      svr,
-		stats:    stats,
+		stats:    NewStat(defaultLayersConfig, strategy),
+		strategy: strategy,
 	}
 	fileServer := http.FileServer(&assetfs.AssetFS{
 		Asset:     Asset,
@@ -72,12 +78,12 @@ func RegisterKeyvisualService(svr *server.Server) (http.Handler, server.APIGroup
 	return k, defaultRegisterAPIGroupInfo
 }
 
-func (s *KeyvisualService) Run() {
-	// TODO: Need to change back to `go s.updateStat(s.ctx)` before merge
-	go s.updateStatFromFiles(s.ctx)
+func (s *Service) Run() {
+	// go s.updateStatFromFiles()
+	go s.updateStat(s.ctx)
 }
 
-func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
+func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	form := r.URL.Query()
 	startKey := form.Get("startkey")
@@ -109,13 +115,19 @@ func (s *KeyvisualService) Heatmap(w http.ResponseWriter, r *http.Request) {
 		zap.String("start-key", startKey),
 		zap.String("end-key", endKey),
 	)
-	matrix := s.stats.RangeMatrix(startTime, endTime, startKey, endKey, GetTag(typ))
-	data, _ := json.Marshal(decorator.RangeTableID(matrix))
-	_, err := w.Write(data)
+
+	// Fixme: return 403
+	if !(startTime.Before(endTime) && (endKey == "" || startKey < endKey)) {
+		panic("wrong range")
+	}
+
+	mx := s.stats.RangeMatrix(startTime, endTime, startKey, endKey, getTag(typ))
+	encoder := json.NewEncoder(w)
+	err := encoder.Encode(&mx)
 	perr(err)
 }
 
-func (s *KeyvisualService) updateStat(ctx context.Context) {
+func (s *Service) updateStat(ctx context.Context) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -131,19 +143,4 @@ func (s *KeyvisualService) updateStat(ctx context.Context) {
 			s.stats.Append(regions, endTime)
 		}
 	}
-}
-
-func (s *KeyvisualService) updateStatFromFiles(ctx context.Context) {
-	log.Info("Keyvisual load files from", zap.Time("start-time", fileNextTime))
-	now := time.Now()
-	for {
-		regions, endTime := scanRegionsFromFile()
-		newTime := now.Add(endTime.Sub(fileEndTime))
-		s.stats.Append(regions, newTime)
-		if endTime.After(fileEndTime) {
-			break
-		}
-	}
-	log.Info("Keyvisual load files to", zap.Time("end-time", fileNextTime))
-	log.Info("Keyvisual load all files")
 }

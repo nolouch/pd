@@ -14,29 +14,172 @@
 package keyvisual
 
 import (
-	"encoding/hex"
-	"encoding/json"
-	"github.com/pingcap/kvproto/pkg/metapb"
+	"reflect"
+	"time"
+	"unsafe"
+
 	"github.com/pingcap/log"
+	"github.com/pingcap/pd/pkg/keyvisual/matrix"
 	"github.com/pingcap/pd/server"
-	"github.com/pingcap/pd/server/api"
 	"github.com/pingcap/pd/server/core"
 	"go.uber.org/zap"
-	"io/ioutil"
-	"os"
-	"sort"
-	"time"
 )
+
+type statTag int
+
+const (
+	IntegrationTag statTag = iota
+	WrittenBytesTag
+	ReadBytesTag
+	WrittenKeysTag
+	ReadKeysTag
+)
+
+func getTag(typ string) statTag {
+	switch typ {
+	case "":
+		return IntegrationTag
+	case "integration":
+		return IntegrationTag
+	case "written_bytes":
+		return WrittenBytesTag
+	case "read_bytes":
+		return ReadBytesTag
+	case "written_keys":
+		return WrittenKeysTag
+	case "read_keys":
+		return ReadKeysTag
+	default:
+		return WrittenBytesTag
+	}
+}
+
+func (tag statTag) String() string {
+	switch tag {
+	case IntegrationTag:
+		return "integration"
+	case WrittenBytesTag:
+		return "written_bytes"
+	case ReadBytesTag:
+		return "read_bytes"
+	case WrittenKeysTag:
+		return "written_keys"
+	case ReadKeysTag:
+		return "read_keys"
+	default:
+		panic("unreachable")
+	}
+}
+
+var storageTags = []statTag{WrittenBytesTag, ReadBytesTag, WrittenKeysTag, ReadKeysTag}
+var responseTags = append([]statTag{IntegrationTag}, storageTags...)
+
+func getDisplayTags(baseTag statTag) []string {
+	displayTags := make([]string, len(responseTags))
+	for i, tag := range responseTags {
+		displayTags[i] = tag.String()
+		if tag == baseTag {
+			displayTags[0], displayTags[i] = displayTags[i], displayTags[0]
+		}
+	}
+	return displayTags
+}
+
+// Fixme: StartKey may not be equal to the EndKey of the previous region
+func getKeys(regions []*core.RegionInfo) []string {
+	keys := make([]string, len(regions)+1)
+	keys[0] = String(regions[0].GetStartKey())
+	endKeys := keys[1:]
+	for i, region := range regions {
+		endKeys[i] = String(region.GetEndKey())
+	}
+	return keys
+}
+
+func getValues(regions []*core.RegionInfo, tag statTag) []uint64 {
+	values := make([]uint64, len(regions))
+	switch tag {
+	case WrittenBytesTag:
+		for i, region := range regions {
+			values[i] = region.GetBytesWritten()
+		}
+	case ReadBytesTag:
+		for i, region := range regions {
+			values[i] = region.GetBytesRead()
+		}
+	case WrittenKeysTag:
+		for i, region := range regions {
+			values[i] = region.GetKeysWritten()
+		}
+	case ReadKeysTag:
+		for i, region := range regions {
+			values[i] = region.GetKeysRead()
+		}
+	case IntegrationTag:
+		for i, region := range regions {
+			values[i] = region.GetBytesWritten() + region.GetBytesRead()
+		}
+	default:
+		panic("unreachable")
+	}
+	return values
+}
+
+func (s *Stat) StorageAxis(regions []*core.RegionInfo) matrix.Axis {
+	regionsLen := len(regions)
+	if regionsLen <= 0 {
+		panic("At least one RegionInfo")
+	}
+
+	keys := getKeys(regions)
+	valuesList := make([][]uint64, len(responseTags))
+	for i, tag := range responseTags {
+		valuesList[i] = getValues(regions, tag)
+	}
+	preAxis := matrix.CreateAxis(keys, valuesList)
+
+	target := 2 * maxDisplayY
+	focusAxis := preAxis.Focus(s.strategy, 1, len(keys)/target, target)
+
+	// responseTags -> storageTags
+	var storageValuesList [][]uint64
+	storageValuesList = append(storageValuesList, focusAxis.ValuesList[1:]...)
+
+	return matrix.CreateAxis(keys, storageValuesList)
+}
+
+func intoResponseAxis(storageAxis matrix.Axis, baseTag statTag) matrix.Axis {
+	// add integration values
+	valuesList := make([][]uint64, 1, len(responseTags))
+	writtenBytes := storageAxis.ValuesList[0]
+	readBytes := storageAxis.ValuesList[1]
+	integration := make([]uint64, len(writtenBytes))
+	for i := range integration {
+		integration[i] = writtenBytes[i] + readBytes[i]
+	}
+	valuesList[0] = integration
+	valuesList = append(valuesList, storageAxis.ValuesList...)
+	// swap baseTag
+	for i, tag := range responseTags {
+		if tag == baseTag {
+			valuesList[0], valuesList[i] = valuesList[i], valuesList[0]
+			return matrix.CreateAxis(storageAxis.Keys, valuesList)
+		}
+	}
+	panic("unreachable")
+}
 
 func scanRegions(cluster *server.RaftCluster) ([]*core.RegionInfo, time.Time) {
 	var key []byte
 	regions := make([]*core.RegionInfo, 0, 1024)
+
 	for {
 		rs := cluster.ScanRegions(key, []byte(""), 1024)
 		length := len(rs)
 		if length == 0 {
 			break
 		}
+
 		regions = append(regions, rs...)
 
 		key = rs[length-1].GetEndKey()
@@ -45,59 +188,17 @@ func scanRegions(cluster *server.RaftCluster) ([]*core.RegionInfo, time.Time) {
 		}
 	}
 
-	log.Info("Update keyvisual regions", zap.Int("total-length", len(regions)))
+	log.Info("Update key visual regions", zap.Int("total-length", len(regions)))
 	return regions, time.Now()
 }
 
-// read from file
-
-var fileNextTime = time.Unix(1574992800, 0) // 2019.11.29 10:00
-var fileEndTime = time.Unix(1575064800, 0)  // 2019.11.30 06:00
-var fileTimeDelta = time.Minute
-
-func scanRegionsFromFile() ([]*core.RegionInfo, time.Time) {
-	var res []*core.RegionInfo
-	fileNow := fileNextTime
-	fileNextTime = fileNow.Add(fileTimeDelta)
-	fileName := fileNow.Format("./data/20060102-15-04.json")
-	jsonFile, err := os.Open(fileName)
-	if err == nil {
-		defer jsonFile.Close()
-		byteValue, err := ioutil.ReadAll(jsonFile)
-		if err == nil {
-			var apiRes api.RegionsInfo
-			json.Unmarshal(byteValue, &apiRes)
-			regions := apiRes.Regions
-			sort.Slice(regions, func(i, j int) bool {
-				return regions[i].StartKey < regions[j].StartKey
-			})
-			res = make([]*core.RegionInfo, len(regions))
-			for i, r := range regions {
-				res[i] = toCoreRegion(r)
-			}
-		}
+func String(b []byte) (s string) {
+	if len(b) == 0 {
+		return ""
 	}
-	return res, fileNow
-}
-
-func toCoreRegion(aRegion *api.RegionInfo) *core.RegionInfo {
-	startKey, _ := hex.DecodeString(aRegion.StartKey)
-	endKey, _ := hex.DecodeString(aRegion.EndKey)
-	meta := &metapb.Region{
-		Id:          aRegion.ID,
-		StartKey:    startKey,
-		EndKey:      endKey,
-		RegionEpoch: aRegion.RegionEpoch,
-		Peers:       aRegion.Peers,
-	}
-	return core.NewRegionInfo(meta, aRegion.Leader,
-		core.SetApproximateKeys(aRegion.ApproximateKeys),
-		core.SetApproximateSize(aRegion.ApproximateSize),
-		core.WithPendingPeers(aRegion.PendingPeers),
-		core.WithDownPeers(aRegion.DownPeers),
-		core.SetWrittenBytes(aRegion.WrittenBytes),
-		core.SetWrittenKeys(aRegion.WrittenKeys),
-		core.SetReadBytes(aRegion.ReadBytes),
-		core.SetReadKeys(aRegion.ReadKeys),
-	)
+	pbytes := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	pstring := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	pstring.Data = pbytes.Data
+	pstring.Len = pbytes.Len
+	return
 }
