@@ -16,6 +16,7 @@ package keyvisual
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -57,7 +58,7 @@ type Service struct {
 func RegisterService(svr *server.Server) (http.Handler, server.APIGroup) {
 	labelStrategy := matrix.LabelStrategy(decorator.TiDBLabelStrategy{})
 	// strategy := matrix.AverageStrategy(labelStrategy)
-	strategy := matrix.DistanceStrategy(labelStrategy, 1.5, 50)
+	strategy := matrix.DistanceStrategy(labelStrategy, math.Phi, 15)
 	k := &Service{
 		ServeMux: http.NewServeMux(),
 		ctx:      context.TODO(),
@@ -78,8 +79,8 @@ func RegisterService(svr *server.Server) (http.Handler, server.APIGroup) {
 }
 
 func (s *Service) Run() {
-	// TODO: Need to change back to `go s.updateStat(s.ctx)` before merge
-	go s.updateStatFromFiles()
+	// go s.updateStatFromFiles()
+	go s.updateStat(s.ctx)
 }
 
 func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +115,11 @@ func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
 		zap.String("start-key", startKey),
 		zap.String("end-key", endKey),
 	)
+
+	// Fixme: return 403
+	if !(startTime.Before(endTime) && (endKey == "" || startKey < endKey)) {
+		panic("wrong range")
+	}
 
 	mx := s.stats.RangeMatrix(startTime, endTime, startKey, endKey, getTag(typ))
 	encoder := json.NewEncoder(w)

@@ -155,9 +155,8 @@ type Stat struct {
 
 func NewStat(conf LayersConfig, strategy matrix.Strategy) *Stat {
 	layers := make([]*layerStat, len(conf))
-	// Fixme: Remove the test startTime.
-	// startTime := time.Now()
-	startTime := fileNextTime
+	startTime := time.Now()
+	// startTime := fileNextTime
 	for i, c := range conf {
 		layers[i] = newLayerStat(c, strategy, startTime)
 		if i > 0 {
