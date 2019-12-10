@@ -77,7 +77,7 @@ func (s *layerStat) Reduce() {
 		s.Head = (s.Head + 1) % s.Len
 	}
 
-	plane := matrix.CreatePlane(times, axes...)
+	plane := matrix.CreatePlane(times, axes)
 	newAxis := plane.Compact(s.Strategy)
 	s.Next.Append(newAxis, s.StartTime)
 }
@@ -200,5 +200,5 @@ func (s *Stat) RangePlane(startTime, endTime time.Time, startKey, endKey string,
 		axis = axis.Focus(s.strategy, 1, len(axis.Keys)/tempMaxRow, tempMaxRow)
 		axes[i] = filter(&axis, tags...)
 	}
-	return matrix.CreatePlane(times, axes...)
+	return matrix.CreatePlane(times, axes)
 }

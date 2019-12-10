@@ -115,7 +115,7 @@ func filter(axis *matrix.Axis, tags ...statTag) matrix.Axis {
 		}
 		valuesList[i] = values
 	}
-	return matrix.CreateAxis(axis.Keys, valuesList...)
+	return matrix.CreateAxis(axis.Keys, valuesList)
 }
 
 // TODO: pre-compact based on IntegrationTag
@@ -130,7 +130,7 @@ func toAxis(regions []*core.RegionInfo) matrix.Axis {
 	valuesList[1] = getValues(regions, ReadBytesTag)
 	valuesList[2] = getValues(regions, WrittenKeysTag)
 	valuesList[3] = getValues(regions, ReadKeysTag)
-	return matrix.CreateAxis(keys, valuesList...)
+	return matrix.CreateAxis(keys, valuesList)
 }
 
 func scanRegions(cluster *server.RaftCluster) ([]*core.RegionInfo, time.Time) {

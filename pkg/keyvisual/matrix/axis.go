@@ -25,7 +25,7 @@ type Axis struct {
 	ValuesList [][]uint64
 }
 
-func CreateAxis(keys []string, valuesList ...[]uint64) Axis {
+func CreateAxis(keys []string, valuesList [][]uint64) Axis {
 	keysLen := len(keys)
 	if keysLen <= 1 {
 		panic("Keys length must be greater than 1")
@@ -104,7 +104,7 @@ func (axis *Axis) Range(startKey string, endKey string) Axis {
 	for i := range valuesList {
 		valuesList[i] = axis.ValuesList[i][start:end]
 	}
-	return CreateAxis(keys, valuesList...)
+	return CreateAxis(keys, valuesList)
 }
 
 func (axis *Axis) Focus(strategy Strategy, threshold uint64, ratio int, target int) Axis {
@@ -121,7 +121,7 @@ func (axis *Axis) Focus(strategy Strategy, threshold uint64, ratio int, target i
 		baseChunk.SetValues(axis.ValuesList[i])
 		newValuesList[i] = baseChunk.Reduce(newChunk.Keys).Values
 	}
-	return CreateAxis(newChunk.Keys, newValuesList...)
+	return CreateAxis(newChunk.Keys, newValuesList)
 }
 
 // Keys and ValuesList[i] from Axis

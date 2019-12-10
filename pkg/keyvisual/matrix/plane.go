@@ -23,7 +23,7 @@ type Plane struct {
 	Axes  []Axis
 }
 
-func CreatePlane(times []time.Time, axes ...Axis) Plane {
+func CreatePlane(times []time.Time, axes []Axis) Plane {
 	if len(times) <= 1 {
 		panic("Times length must be greater than 1")
 	}
@@ -34,7 +34,7 @@ func CreatePlane(times []time.Time, axes ...Axis) Plane {
 }
 
 func CreateEmptyPlane(startTime, endTime time.Time, startKey, endKey string, valuesListLen int) Plane {
-	return CreatePlane([]time.Time{startTime, endTime}, CreateEmptyAxis(startKey, endKey, valuesListLen))
+	return CreatePlane([]time.Time{startTime, endTime}, []Axis{CreateEmptyAxis(startKey, endKey, valuesListLen)})
 }
 
 func (plane *Plane) Compact(strategy Strategy) Axis {
@@ -55,7 +55,7 @@ func (plane *Plane) Compact(strategy Strategy) Axis {
 		valuesList[j] = compactChunk.Values
 	}
 	strategy.End()
-	return CreateAxis(compactChunk.Keys, valuesList...)
+	return CreateAxis(compactChunk.Keys, valuesList)
 }
 
 func (plane *Plane) Pixel(strategy Strategy, target int) Matrix {
