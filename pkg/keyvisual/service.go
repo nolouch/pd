@@ -16,12 +16,12 @@ package keyvisual
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
 	"time"
 
-	assetfs "github.com/elazarl/go-bindata-assetfs"
 	"github.com/pingcap/log"
 	"github.com/pingcap/pd/pkg/keyvisual/decorator"
 	"github.com/pingcap/pd/pkg/keyvisual/matrix"
@@ -66,16 +66,14 @@ func RegisterService(svr *server.Server) (http.Handler, server.APIGroup) {
 		stats:    NewStat(defaultLayersConfig, strategy),
 		strategy: strategy,
 	}
-	fileServer := http.FileServer(&assetfs.AssetFS{
-		Asset:     Asset,
-		AssetDir:  AssetDir,
-		AssetInfo: AssetInfo,
-		Prefix:    "/public",
-	})
-	k.Handle("/pd/apis/keyvisual/v1/ui/", http.StripPrefix("/pd/apis/keyvisual/v1/ui/", fileServer))
+
 	k.HandleFunc("/pd/apis/keyvisual/v1/heatmaps", k.Heatmap)
 	k.Run()
 	return k, defaultRegisterAPIGroupInfo
+}
+func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("DebugTop:", r.RequestURI)
+	s.ServeMux.ServeHTTP(w, r)
 }
 
 func (s *Service) Run() {
@@ -84,6 +82,7 @@ func (s *Service) Run() {
 }
 
 func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Debug:", r.RequestURI)
 	w.Header().Set("Content-type", "application/json")
 	form := r.URL.Query()
 	startKey := form.Get("startkey")

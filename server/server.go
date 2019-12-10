@@ -42,6 +42,7 @@ import (
 	"github.com/pingcap/pd/server/kv"
 	"github.com/pingcap/pd/server/member"
 	"github.com/pingcap/pd/server/tso"
+	"github.com/pingcap/pd/pkg/ui"
 	"github.com/pkg/errors"
 	"github.com/urfave/negroni"
 	"go.etcd.io/etcd/clientv3"
@@ -181,8 +182,10 @@ func CreateServer(cfg *config.Config, apiBuilders ...HandlerBuilder) (*Server, e
 		if err != nil {
 			return nil, err
 		}
+
 		etcdCfg.UserHandlers = map[string]http.Handler{
 			pdAPIPrefix: apiHandler,
+			"/ui/":      http.StripPrefix("/ui/", ui.Handler()),
 		}
 	}
 	etcdCfg.ServiceRegister = func(gs *grpc.Server) { pdpb.RegisterPDServer(gs, s) }
