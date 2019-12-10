@@ -175,7 +175,7 @@ func (s *Stat) Append(regions []*core.RegionInfo, endTime time.Time) {
 	if len(regions) == 0 {
 		return
 	}
-	axis := toAxis(regions)
+	axis := s.StorageAxis(regions)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.layers[0].Append(axis, endTime)
@@ -188,17 +188,18 @@ func (s *Stat) Range(startTime, endTime time.Time) (times []time.Time, axes []ma
 	return
 }
 
-func (s *Stat) RangePlane(startTime, endTime time.Time, startKey, endKey string, tags ...statTag) matrix.Plane {
+func (s *Stat) RangeMatrix(startTime, endTime time.Time, startKey, endKey string, baseTag statTag) matrix.Matrix {
 	times, axes := s.Range(startTime, endTime)
+	var plane matrix.Plane
 	if len(times) <= 1 {
-		return matrix.CreateEmptyPlane(startTime, endTime, startKey, endKey, len(tags))
+		plane = matrix.CreateEmptyPlane(startTime, endTime, startKey, endKey, len(responseTags))
+	} else {
+		for i, axis := range axes {
+			axis = axis.Range(startKey, endKey)
+			axis = intoResponseAxis(axis, baseTag)
+			axes[i] = axis
+		}
+		plane = matrix.CreatePlane(times, axes)
 	}
-	for i, axis := range axes {
-		axis = axis.Range(startKey, endKey)
-		// Fixme: Remove the test Focus.
-		tempMaxRow := 4 * maxDisplayY
-		axis = axis.Focus(s.strategy, 1, len(axis.Keys)/tempMaxRow, tempMaxRow)
-		axes[i] = filter(&axis, tags...)
-	}
-	return matrix.CreatePlane(times, axes)
+	return plane.Pixel(s.strategy, maxDisplayY, getDisplayTags(baseTag))
 }

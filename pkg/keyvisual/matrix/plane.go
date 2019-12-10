@@ -58,7 +58,11 @@ func (plane *Plane) Compact(strategy Strategy) Axis {
 	return CreateAxis(compactChunk.Keys, valuesList)
 }
 
-func (plane *Plane) Pixel(strategy Strategy, target int) Matrix {
+func (plane *Plane) Pixel(strategy Strategy, target int, displayTags []string) Matrix {
+	valuesListLen := len(plane.Axes[0].ValuesList)
+	if valuesListLen != len(displayTags) {
+		panic("the length of displayTags and valuesList should be equal")
+	}
 	axesLen := len(plane.Axes)
 	chunks := make([]chunk, axesLen)
 	for i, axis := range plane.Axes {
@@ -66,16 +70,16 @@ func (plane *Plane) Pixel(strategy Strategy, target int) Matrix {
 	}
 	compactChunk := compact(strategy, chunks)
 	baseKeys := compactChunk.Divide(strategy, target)
-	valuesListLen := len(plane.Axes[0].ValuesList)
 	matrix := createMatrix(strategy, plane.Times, baseKeys, valuesListLen)
 	for j := 0; j < valuesListLen; j++ {
-		matrix.Data[j] = make([][]uint64, axesLen)
+		data := make([][]uint64, axesLen)
 		for i, axis := range plane.Axes {
 			compactChunk.Clear()
 			chunks[i].SetValues(axis.ValuesList[j])
 			strategy.SplitTo(compactChunk, chunks[i], i)
-			matrix.Data[j][i] = compactChunk.Reduce(baseKeys).Values
+			data[i] = compactChunk.Reduce(baseKeys).Values
 		}
+		matrix.DataMap[displayTags[j]] = data
 	}
 	strategy.End()
 	return matrix

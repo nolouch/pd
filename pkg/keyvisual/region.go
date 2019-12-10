@@ -28,18 +28,18 @@ import (
 type statTag int
 
 const (
-	WrittenBytesTag statTag = iota
+	IntegrationTag statTag = iota
+	WrittenBytesTag
 	ReadBytesTag
 	WrittenKeysTag
 	ReadKeysTag
-	IntegrationTag
 )
-
-const valuesListLen = 4
 
 func getTag(typ string) statTag {
 	switch typ {
 	case "":
+		return IntegrationTag
+	case "integration":
 		return IntegrationTag
 	case "written_bytes":
 		return WrittenBytesTag
@@ -52,6 +52,37 @@ func getTag(typ string) statTag {
 	default:
 		return WrittenBytesTag
 	}
+}
+
+func (tag statTag) String() string {
+	switch tag {
+	case IntegrationTag:
+		return "integration"
+	case WrittenBytesTag:
+		return "written_bytes"
+	case ReadBytesTag:
+		return "read_bytes"
+	case WrittenKeysTag:
+		return "written_keys"
+	case ReadKeysTag:
+		return "read_keys"
+	default:
+		panic("unreachable")
+	}
+}
+
+var storageTags = []statTag{WrittenBytesTag, ReadBytesTag, WrittenKeysTag, ReadKeysTag}
+var responseTags = append([]statTag{IntegrationTag}, storageTags...)
+
+func getDisplayTags(baseTag statTag) []string {
+	displayTags := make([]string, len(responseTags))
+	for i, tag := range responseTags {
+		displayTags[i] = tag.String()
+		if tag == baseTag {
+			displayTags[0], displayTags[i] = displayTags[i], displayTags[0]
+		}
+	}
+	return displayTags
 }
 
 // Fixme: StartKey may not be equal to the EndKey of the previous region
@@ -94,43 +125,48 @@ func getValues(regions []*core.RegionInfo, tag statTag) []uint64 {
 	return values
 }
 
-func filter(axis *matrix.Axis, tags ...statTag) matrix.Axis {
-	valuesList := make([][]uint64, len(tags))
-	for i, tag := range tags {
-		var values []uint64
-		switch tag {
-		case WrittenBytesTag:
-			values = axis.ValuesList[0]
-		case ReadBytesTag:
-			values = axis.ValuesList[1]
-		case WrittenKeysTag:
-			values = axis.ValuesList[2]
-		case ReadKeysTag:
-			values = axis.ValuesList[3]
-		case IntegrationTag:
-			values = make([]uint64, len(axis.ValuesList[0]))
-			for j := range values {
-				values[j] = axis.ValuesList[0][j] + axis.ValuesList[1][j]
-			}
-		}
-		valuesList[i] = values
-	}
-	return matrix.CreateAxis(axis.Keys, valuesList)
-}
-
-// TODO: pre-compact based on IntegrationTag
-func toAxis(regions []*core.RegionInfo) matrix.Axis {
+func (s *Stat) StorageAxis(regions []*core.RegionInfo) matrix.Axis {
 	regionsLen := len(regions)
 	if regionsLen <= 0 {
 		panic("At least one RegionInfo")
 	}
+
 	keys := getKeys(regions)
-	valuesList := make([][]uint64, valuesListLen)
-	valuesList[0] = getValues(regions, WrittenBytesTag)
-	valuesList[1] = getValues(regions, ReadBytesTag)
-	valuesList[2] = getValues(regions, WrittenKeysTag)
-	valuesList[3] = getValues(regions, ReadKeysTag)
-	return matrix.CreateAxis(keys, valuesList)
+	valuesList := make([][]uint64, len(responseTags))
+	for i, tag := range responseTags {
+		valuesList[i] = getValues(regions, tag)
+	}
+	preAxis := matrix.CreateAxis(keys, valuesList)
+
+	target := 2 * maxDisplayY
+	focusAxis := preAxis.Focus(s.strategy, 1, len(keys)/target, target)
+
+	// responseTags -> storageTags
+	var storageValuesList [][]uint64
+	storageValuesList = append(storageValuesList, focusAxis.ValuesList[1:]...)
+
+	return matrix.CreateAxis(keys, storageValuesList)
+}
+
+func intoResponseAxis(storageAxis matrix.Axis, baseTag statTag) matrix.Axis {
+	// add integration values
+	valuesList := make([][]uint64, 1, len(responseTags))
+	writtenBytes := storageAxis.ValuesList[0]
+	readBytes := storageAxis.ValuesList[1]
+	integration := make([]uint64, len(writtenBytes))
+	for i := range integration {
+		integration[i] = writtenBytes[i] + readBytes[i]
+	}
+	valuesList[0] = integration
+	valuesList = append(valuesList, storageAxis.ValuesList...)
+	// swap baseTag
+	for i, tag := range responseTags {
+		if tag == baseTag {
+			valuesList[0], valuesList[i] = valuesList[i], valuesList[0]
+			return matrix.CreateAxis(storageAxis.Keys, valuesList)
+		}
+	}
+	panic("unreachable")
 }
 
 func scanRegions(cluster *server.RaftCluster) ([]*core.RegionInfo, time.Time) {

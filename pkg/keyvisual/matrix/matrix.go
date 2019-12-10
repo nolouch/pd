@@ -24,13 +24,13 @@ type LabelKey struct {
 }
 
 type Matrix struct {
-	Data     [][][]uint64 `json:"values"` // data of the n matrix
-	KeyAxis  []LabelKey   `json:"keyAxis"`
-	TimeAxis []int64      `json:"timeAxis"`
+	DataMap  map[string][][]uint64 `json:"data"`
+	KeyAxis  []LabelKey            `json:"keyAxis"`
+	TimeAxis []int64               `json:"timeAxis"`
 }
 
 func createMatrix(strategy Strategy, times []time.Time, keys []string, valuesListLen int) Matrix {
-	data := make([][][]uint64, valuesListLen)
+	dataMap := make(map[string][][]uint64, valuesListLen)
 	// collect label keys
 	keyAxis := make([]LabelKey, len(keys))
 	for i, key := range keys {
@@ -42,7 +42,7 @@ func createMatrix(strategy Strategy, times []time.Time, keys []string, valuesLis
 		timeAxis[i] = t.Unix()
 	}
 	return Matrix{
-		Data:     data,
+		DataMap:  dataMap,
 		KeyAxis:  keyAxis,
 		TimeAxis: timeAxis,
 	}

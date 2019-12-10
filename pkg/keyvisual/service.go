@@ -115,12 +115,9 @@ func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
 		zap.String("end-key", endKey),
 	)
 
-	// Fixme: Remove the test IntegrationTag.
-	plane := s.stats.RangePlane(startTime, endTime, startKey, endKey, IntegrationTag, getTag(typ))
-	mx := plane.Pixel(s.strategy, maxDisplayY)
-
-	data, _ := json.Marshal(&mx)
-	_, err := w.Write(data)
+	mx := s.stats.RangeMatrix(startTime, endTime, startKey, endKey, getTag(typ))
+	encoder := json.NewEncoder(w)
+	err := encoder.Encode(&mx)
 	perr(err)
 }
 
