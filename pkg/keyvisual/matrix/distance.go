@@ -80,7 +80,7 @@ func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int) {
 	CheckPartOf(dstKeys, srcKeys)
 
 	if len(dstKeys) == len(srcKeys) {
-		dst.SetValues(src.Values)
+		copy(dstValues, srcValues)
 		return
 	}
 
@@ -143,14 +143,17 @@ func (s *distanceStrategy) GenerateScale(dis []int, keys, compactKeys []string, 
 			end++
 		}
 		if start+1 == end {
-			scale[start] = 1
+			scale[start] = 1.0
+			start++
 		} else {
 			// copy tempDis and calculate the top n levels
 			tempDis = append(tempDis[:0], dis[start:end]...)
 			tempLen := len(tempDis)
 			sort.Ints(tempDis)
 			level := 0
-			tempMap[tempDis[0]] = 1
+			tempMap[tempDis[0]] = 1.0
+			tempValue := 1.0
+			tempSum := 1.0
 			for i := 1; i < tempLen; i++ {
 				d := tempDis[i]
 				if d != tempDis[i-1] {
@@ -158,15 +161,18 @@ func (s *distanceStrategy) GenerateScale(dis []int, keys, compactKeys []string, 
 					if level == s.SplitLevel {
 						tempMap[d] = 0
 					} else {
-						tempMap[d] = math.Pow(s.SplitRatio, float64(level))
+						tempValue = math.Pow(s.SplitRatio, float64(level))
+						tempMap[d] = tempValue
 					}
 				}
+				tempSum += tempValue
 			}
 			// calculate scale
 			for ; start < end; start++ {
-				scale[start] = tempMap[dis[start]]
+				scale[start] = tempMap[dis[start]] / tempSum
 			}
 		}
+		end++
 	}
 	return scale, tempDis
 }

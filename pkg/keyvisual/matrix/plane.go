@@ -47,8 +47,7 @@ func (plane *Plane) Compact(strategy Strategy) Axis {
 	valuesList := make([][]uint64, valuesListLen)
 	valuesList[0] = compactChunk.Values
 	for j := 1; j < valuesListLen; j++ {
-		newValues := make([]uint64, len(compactChunk.Values))
-		compactChunk.SetValues(newValues)
+		compactChunk.SetZeroValues()
 		for i, axis := range plane.Axes {
 			chunks[i].SetValues(axis.ValuesList[j])
 			strategy.SplitAdd(compactChunk, chunks[i], i)
@@ -78,6 +77,7 @@ func (plane *Plane) Pixel(strategy Strategy, target int) Matrix {
 			matrix.Data[j][i] = compactChunk.Reduce(baseKeys).Values
 		}
 	}
+	strategy.End()
 	return matrix
 }
 

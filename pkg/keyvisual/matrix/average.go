@@ -35,7 +35,7 @@ func (_ averageStrategy) SplitTo(dst, src chunk, _ int) {
 	CheckPartOf(dstKeys, srcKeys)
 
 	if len(dstKeys) == len(srcKeys) {
-		dst.SetValues(src.Values)
+		copy(dstValues, srcValues)
 		return
 	}
 

@@ -62,30 +62,43 @@ func (axis *Axis) Range(startKey string, endKey string) Axis {
 	if endKey != "" && startKey >= endKey {
 		panic("StartKey must be less than EndKey")
 	}
+
+	// ensure intersection
 	if endKey != "" && endKey <= axis.Keys[0] {
 		return CreateEmptyAxis(startKey, endKey, len(axis.ValuesList))
 	}
-	keysLen := len(axis.Keys)
-	start := sort.Search(keysLen, func(i int) bool {
-		return axis.Keys[i] > startKey
-	})
-	if start == keysLen {
+	axisEndKey := GetLastKey(axis.Keys)
+	if axisEndKey != "" && startKey >= axisEndKey {
 		return CreateEmptyAxis(startKey, endKey, len(axis.ValuesList))
 	}
+
+	keysLen := len(axis.Keys)
+	sortedKeysLen := keysLen
+	if axisEndKey == "" {
+		sortedKeysLen--
+	}
+
+	// start index (contain)
+	start := sort.Search(sortedKeysLen, func(i int) bool {
+		return axis.Keys[i] > startKey
+	})
 	if start > 0 {
 		start--
 	}
+
+	// end index (contain)
 	var end int
 	if endKey == "" {
 		end = keysLen - 1
 	} else {
-		end = sort.Search(keysLen, func(i int) bool {
+		end = sort.Search(sortedKeysLen, func(i int) bool {
 			return axis.Keys[i] >= endKey
 		})
 		if end == keysLen {
 			end--
 		}
 	}
+
 	keys := axis.Keys[start : end+1]
 	valuesList := make([][]uint64, len(axis.ValuesList))
 	for i := range valuesList {
@@ -147,6 +160,11 @@ func (c *chunk) SetValues(values []uint64) {
 	c.Values = values
 }
 
+func (c *chunk) SetZeroValues() {
+	newValues := make([]uint64, len(c.Values))
+	c.SetValues(newValues)
+}
+
 // Set all values to 0
 func (c *chunk) Clear() {
 	MemsetUint64(c.Values, 0)
@@ -158,9 +176,6 @@ func (c *chunk) Clear() {
 func (c *chunk) Reduce(newKeys []string) chunk {
 	keys := c.Keys
 	CheckPartOf(keys, newKeys)
-	if len(keys) == len(newKeys) {
-		return *c
-	}
 
 	newValues := make([]uint64, len(newKeys)-1)
 	endKeys := newKeys[1:]
