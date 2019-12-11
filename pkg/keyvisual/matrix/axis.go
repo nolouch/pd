@@ -178,6 +178,12 @@ func (c *chunk) Reduce(newKeys []string) chunk {
 	CheckPartOf(keys, newKeys)
 
 	newValues := make([]uint64, len(newKeys)-1)
+
+	if len(keys) == len(newKeys) {
+		copy(newValues, c.Values)
+		return createChunk(newKeys, newValues)
+	}
+
 	endKeys := newKeys[1:]
 	j := 0
 	for i, value := range c.Values {
