@@ -138,7 +138,7 @@ func (s *Stat) StorageAxis(regions []*core.RegionInfo) matrix.Axis {
 	}
 	preAxis := matrix.CreateAxis(keys, valuesList)
 
-	target := 2 * maxDisplayY
+	target := maxDisplayY
 	focusAxis := preAxis.Focus(s.strategy, 1, len(keys)/target, target)
 
 	// responseTags -> storageTags
