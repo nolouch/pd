@@ -144,8 +144,7 @@ func (s *Stat) StorageAxis(regions []*core.RegionInfo) matrix.Axis {
 	// responseTags -> storageTags
 	var storageValuesList [][]uint64
 	storageValuesList = append(storageValuesList, focusAxis.ValuesList[1:]...)
-
-	return matrix.CreateAxis(keys, storageValuesList)
+	return matrix.CreateAxis(focusAxis.Keys, storageValuesList)
 }
 
 func intoResponseAxis(storageAxis matrix.Axis, baseTag statTag) matrix.Axis {
