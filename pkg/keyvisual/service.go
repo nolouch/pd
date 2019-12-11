@@ -14,12 +14,14 @@
 package keyvisual
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/log"
@@ -121,9 +123,16 @@ func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mx := s.stats.RangeMatrix(startTime, endTime, startKey, endKey, getTag(typ))
-	encoder := json.NewEncoder(w)
-	err := encoder.Encode(&mx)
-	perr(err)
+	var encoder *json.Encoder
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer perr(gz.Close())
+		encoder = json.NewEncoder(gz)
+	} else {
+		encoder = json.NewEncoder(w)
+	}
+	perr(encoder.Encode(&mx))
 }
 
 func (s *Service) updateStat(ctx context.Context) {
