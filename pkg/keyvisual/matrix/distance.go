@@ -63,9 +63,10 @@ func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) 
 	var wg sync.WaitGroup
 	generateFunc := func(i int) {
 		// key dis -> bucket dis
-		dis[i] = toBucketDis(dis[i])
+		var maxDis int
+		dis[i], maxDis = toBucketDis(dis[i])
 		// bucket dis -> bucket scale
-		scale[i] = s.GenerateScale(dis[i], chunks[i].Keys, compactKeys)
+		scale[i] = s.GenerateScale(dis[i], maxDis, chunks[i].Keys, compactKeys)
 		wg.Done()
 	}
 	wg.Add(axesLen)
@@ -136,10 +137,10 @@ func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int, helper interf
 	}
 }
 
-func (s *distanceStrategy) GenerateScale(dis []int, keys, compactKeys []string) (scale []float64) {
+func (s *distanceStrategy) GenerateScale(dis []int, maxDis int, keys, compactKeys []string) (scale []float64) {
 	scale = make([]float64, len(dis))
 	var tempDis []int
-	tempMap := make(map[int]float64)
+	tempMap := make([]float64, maxDis+1)
 	start := 0
 	for startKey := keys[0]; compactKeys[start] != startKey; start++ {
 	}
@@ -208,9 +209,11 @@ func updateRightDis(dis, rightDis []int, keys, compactKeys []string) {
 	}
 }
 
-func toBucketDis(dis []int) []int {
+func toBucketDis(dis []int) ([]int, int) {
+	maxDis := 0
 	for i := len(dis) - 1; i > 0; i-- {
 		dis[i] = Max(dis[i], dis[i-1])
+		maxDis = Max(maxDis, dis[i])
 	}
-	return dis[1:]
+	return dis[1:], maxDis
 }
