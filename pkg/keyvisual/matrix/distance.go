@@ -16,6 +16,7 @@ package matrix
 import (
 	"math"
 	"sort"
+	"sync"
 )
 
 type distanceHelper struct {
@@ -58,16 +59,20 @@ func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) 
 	for i := end - 1; i >= 0; i-- {
 		updateRightDis(dis[i], dis[i+1], chunks[i].Keys, compactKeys)
 	}
-	// key dis -> bucket dis
-	for i := 0; i < axesLen; i++ {
+
+	var wg sync.WaitGroup
+	generateFunc := func(i int) {
+		// key dis -> bucket dis
 		dis[i] = toBucketDis(dis[i])
+		// bucket dis -> bucket scale
+		scale[i] = s.GenerateScale(dis[i], chunks[i].Keys, compactKeys)
+		wg.Done()
 	}
-	// bucket dis -> bucket scale
-	var tempDis []int
-	tempMap := make(map[int]float64)
+	wg.Add(axesLen)
 	for i := 0; i < axesLen; i++ {
-		scale[i], tempDis = s.GenerateScale(dis[i], chunks[i].Keys, compactKeys, tempDis, tempMap)
+		go generateFunc(i)
 	}
+	wg.Wait()
 	return distanceHelper{Scale: scale}
 }
 
@@ -131,8 +136,10 @@ func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int, helper interf
 	}
 }
 
-func (s *distanceStrategy) GenerateScale(dis []int, keys, compactKeys []string, tempDis []int, tempMap map[int]float64) ([]float64, []int) {
-	scale := make([]float64, len(dis))
+func (s *distanceStrategy) GenerateScale(dis []int, keys, compactKeys []string) (scale []float64) {
+	scale = make([]float64, len(dis))
+	var tempDis []int
+	tempMap := make(map[int]float64)
 	start := 0
 	for startKey := keys[0]; compactKeys[start] != startKey; start++ {
 	}
@@ -173,7 +180,7 @@ func (s *distanceStrategy) GenerateScale(dis []int, keys, compactKeys []string, 
 		}
 		end++
 	}
-	return scale, tempDis
+	return
 }
 
 func updateLeftDis(dis, leftDis []int, keys, compactKeys []string) {
