@@ -18,11 +18,14 @@ import (
 	"sort"
 )
 
+type distanceHelper struct {
+	Scale [][]float64
+}
+
 type distanceStrategy struct {
 	LabelStrategy
 	SplitRatio float64
 	SplitLevel int
-	Scale      [][]float64
 }
 
 func DistanceStrategy(label LabelStrategy, ratio float64, level int) Strategy {
@@ -33,7 +36,7 @@ func DistanceStrategy(label LabelStrategy, ratio float64, level int) Strategy {
 	}
 }
 
-func (s *distanceStrategy) Start(chunks []chunk, compactKeys []string) {
+func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) interface{} {
 	axesLen := len(chunks)
 	keysLen := len(compactKeys)
 	virtualColumn := make([]int, keysLen)
@@ -65,14 +68,10 @@ func (s *distanceStrategy) Start(chunks []chunk, compactKeys []string) {
 	for i := 0; i < axesLen; i++ {
 		scale[i], tempDis = s.GenerateScale(dis[i], chunks[i].Keys, compactKeys, tempDis, tempMap)
 	}
-	s.Scale = scale
+	return distanceHelper{Scale: scale}
 }
 
-func (s *distanceStrategy) End() {
-	s.Scale = nil
-}
-
-func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int) {
+func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int, helper interface{}) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
 	srcKeys := src.Keys
@@ -88,7 +87,7 @@ func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int) {
 	for startKey := srcKeys[0]; dstKeys[start] != startKey; start++ {
 	}
 	end := start + 1
-	scale := s.Scale
+	scale := helper.(distanceHelper).Scale
 	for i, key := range srcKeys[1:] {
 		for dstKeys[end] != key {
 			end++
@@ -101,7 +100,7 @@ func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int) {
 	}
 }
 
-func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int) {
+func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int, helper interface{}) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
 	srcKeys := src.Keys
@@ -119,7 +118,7 @@ func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int) {
 	for startKey := srcKeys[0]; dstKeys[start] != startKey; start++ {
 	}
 	end := start + 1
-	scale := s.Scale
+	scale := helper.(distanceHelper).Scale
 	for i, key := range srcKeys[1:] {
 		for dstKeys[end] != key {
 			end++
