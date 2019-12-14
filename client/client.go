@@ -216,6 +216,7 @@ func (c *client) updateLeader() error {
 		members, err := c.getMembers(ctx, u)
 		cancel()
 		if err != nil || members.GetLeader() == nil || len(members.GetLeader().GetClientUrls()) == 0 {
+			log.Warn("cannot update leader", zap.Error(err))
 			select {
 			case <-c.ctx.Done():
 				return errors.WithStack(err)
@@ -269,6 +270,7 @@ func (c *client) getOrCreateGRPCConn(addr string) (*grpc.ClientConn, error) {
 	conn, ok := c.connMu.clientConns[addr]
 	c.connMu.RUnlock()
 	if ok {
+		log.Info("get connection", zap.String("addr", addr), zap.String("state", conn.GetState().String()))
 		return conn, nil
 	}
 
