@@ -84,6 +84,8 @@ func (s *Service) Run() {
 }
 
 func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
+	log.Info("Start Services")
+	defer log.Info("End Service")
 	fmt.Println("Debug:", r.RequestURI)
 	w.Header().Set("Content-type", "application/json")
 	form := r.URL.Query()
