@@ -43,11 +43,11 @@ func (_ averageStrategy) SplitTo(dst, src chunk, _ int, _ interface{}) {
 	}
 
 	start := 0
-	for startKey := srcKeys[0]; dstKeys[start] != startKey; start++ {
+	for startKey := srcKeys[0]; !equal(dstKeys[start], startKey); start++ {
 	}
 	end := start + 1
 	for i, key := range srcKeys[1:] {
-		for dstKeys[end] != key {
+		for !equal(dstKeys[end], key) {
 			end++
 		}
 		value := srcValues[i] / uint64(end-start)
@@ -73,11 +73,11 @@ func (_ averageStrategy) SplitAdd(dst, src chunk, _ int, _ interface{}) {
 	}
 
 	start := 0
-	for startKey := srcKeys[0]; dstKeys[start] != startKey; start++ {
+	for startKey := srcKeys[0]; !equal(dstKeys[start], startKey); start++ {
 	}
 	end := start + 1
 	for i, key := range srcKeys[1:] {
-		for dstKeys[end] != key {
+		for !equal(dstKeys[end], key) {
 			end++
 		}
 		value := srcValues[i] / uint64(end-start)

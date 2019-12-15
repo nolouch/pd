@@ -185,7 +185,7 @@ func (c *chunk) Reduce(newKeys []string) chunk {
 	endKeys := newKeys[1:]
 	j := 0
 	for i, value := range c.Values {
-		if keys[i] == endKeys[j] {
+		if equal(keys[i], endKeys[j]) {
 			j++
 		}
 		newValues[j] += value
