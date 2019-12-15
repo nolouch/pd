@@ -15,11 +15,13 @@ package matrix
 
 import "encoding/hex"
 
+// TODO:
+// * Multiplexing data between requests
+// * Limit memory usage.
 type splitStrategy interface {
-	Start(chunks []chunk, compactKeys []string)
-	End()
-	SplitTo(dst, src chunk, axesIndex int)
-	SplitAdd(dst, src chunk, axesIndex int)
+	GenerateHelper(chunks []chunk, compactKeys []string) interface{}
+	SplitTo(dst, src chunk, axesIndex int, helper interface{})
+	SplitAdd(dst, src chunk, axesIndex int, helper interface{})
 }
 
 type LabelStrategy interface {

@@ -42,7 +42,7 @@ func (plane *Plane) Compact(strategy Strategy) Axis {
 	for i, axis := range plane.Axes {
 		chunks[i] = createChunk(axis.Keys, axis.ValuesList[0])
 	}
-	compactChunk := compact(strategy, chunks)
+	compactChunk, helper := compact(strategy, chunks)
 	valuesListLen := len(plane.Axes[0].ValuesList)
 	valuesList := make([][]uint64, valuesListLen)
 	valuesList[0] = compactChunk.Values
@@ -50,11 +50,10 @@ func (plane *Plane) Compact(strategy Strategy) Axis {
 		compactChunk.SetZeroValues()
 		for i, axis := range plane.Axes {
 			chunks[i].SetValues(axis.ValuesList[j])
-			strategy.SplitAdd(compactChunk, chunks[i], i)
+			strategy.SplitAdd(compactChunk, chunks[i], i, helper)
 		}
 		valuesList[j] = compactChunk.Values
 	}
-	strategy.End()
 	return CreateAxis(compactChunk.Keys, valuesList)
 }
 
@@ -68,7 +67,7 @@ func (plane *Plane) Pixel(strategy Strategy, target int, displayTags []string) M
 	for i, axis := range plane.Axes {
 		chunks[i] = createChunk(axis.Keys, axis.ValuesList[0])
 	}
-	compactChunk := compact(strategy, chunks)
+	compactChunk, helper := compact(strategy, chunks)
 	baseKeys := compactChunk.Divide(strategy, target)
 	matrix := createMatrix(strategy, plane.Times, baseKeys, valuesListLen)
 	for j := 0; j < valuesListLen; j++ {
@@ -76,16 +75,15 @@ func (plane *Plane) Pixel(strategy Strategy, target int, displayTags []string) M
 		for i, axis := range plane.Axes {
 			compactChunk.Clear()
 			chunks[i].SetValues(axis.ValuesList[j])
-			strategy.SplitTo(compactChunk, chunks[i], i)
+			strategy.SplitTo(compactChunk, chunks[i], i, helper)
 			data[i] = compactChunk.Reduce(baseKeys).Values
 		}
 		matrix.DataMap[displayTags[j]] = data
 	}
-	strategy.End()
 	return matrix
 }
 
-func compact(strategy Strategy, chunks []chunk) chunk {
+func compact(strategy Strategy, chunks []chunk) (compactChunk chunk, helper interface{}) {
 	// get compact chunk keys
 	keySet := make(map[string]struct{})
 	unlimitedEnd := false
@@ -101,10 +99,10 @@ func compact(strategy Strategy, chunks []chunk) chunk {
 			keySet[key] = struct{}{}
 		}
 	}
-	compactChunk := createZeroChunk(MakeKeys(keySet, unlimitedEnd))
-	strategy.Start(chunks, compactChunk.Keys)
+	compactChunk = createZeroChunk(MakeKeys(keySet, unlimitedEnd))
+	helper = strategy.GenerateHelper(chunks, compactChunk.Keys)
 	for i, c := range chunks {
-		strategy.SplitAdd(compactChunk, c, i)
+		strategy.SplitAdd(compactChunk, c, i, helper)
 	}
-	return compactChunk
+	return
 }

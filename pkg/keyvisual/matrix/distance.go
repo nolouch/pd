@@ -16,13 +16,17 @@ package matrix
 import (
 	"math"
 	"sort"
+	"sync"
 )
+
+type distanceHelper struct {
+	Scale [][]float64
+}
 
 type distanceStrategy struct {
 	LabelStrategy
 	SplitRatio float64
 	SplitLevel int
-	Scale      [][]float64
 }
 
 func DistanceStrategy(label LabelStrategy, ratio float64, level int) Strategy {
@@ -33,7 +37,7 @@ func DistanceStrategy(label LabelStrategy, ratio float64, level int) Strategy {
 	}
 }
 
-func (s *distanceStrategy) Start(chunks []chunk, compactKeys []string) {
+func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) interface{} {
 	axesLen := len(chunks)
 	keysLen := len(compactKeys)
 	virtualColumn := make([]int, keysLen)
@@ -55,24 +59,25 @@ func (s *distanceStrategy) Start(chunks []chunk, compactKeys []string) {
 	for i := end - 1; i >= 0; i-- {
 		updateRightDis(dis[i], dis[i+1], chunks[i].Keys, compactKeys)
 	}
-	// key dis -> bucket dis
-	for i := 0; i < axesLen; i++ {
-		dis[i] = toBucketDis(dis[i])
+
+	var wg sync.WaitGroup
+	generateFunc := func(i int) {
+		// key dis -> bucket dis
+		var maxDis int
+		dis[i], maxDis = toBucketDis(dis[i])
+		// bucket dis -> bucket scale
+		scale[i] = s.GenerateScale(dis[i], maxDis, chunks[i].Keys, compactKeys)
+		wg.Done()
 	}
-	// bucket dis -> bucket scale
-	var tempDis []int
-	tempMap := make(map[int]float64)
+	wg.Add(axesLen)
 	for i := 0; i < axesLen; i++ {
-		scale[i], tempDis = s.GenerateScale(dis[i], chunks[i].Keys, compactKeys, tempDis, tempMap)
+		go generateFunc(i)
 	}
-	s.Scale = scale
+	wg.Wait()
+	return distanceHelper{Scale: scale}
 }
 
-func (s *distanceStrategy) End() {
-	s.Scale = nil
-}
-
-func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int) {
+func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int, helper interface{}) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
 	srcKeys := src.Keys
@@ -88,7 +93,7 @@ func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int) {
 	for startKey := srcKeys[0]; dstKeys[start] != startKey; start++ {
 	}
 	end := start + 1
-	scale := s.Scale
+	scale := helper.(distanceHelper).Scale
 	for i, key := range srcKeys[1:] {
 		for dstKeys[end] != key {
 			end++
@@ -101,7 +106,7 @@ func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int) {
 	}
 }
 
-func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int) {
+func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int, helper interface{}) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
 	srcKeys := src.Keys
@@ -119,7 +124,7 @@ func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int) {
 	for startKey := srcKeys[0]; dstKeys[start] != startKey; start++ {
 	}
 	end := start + 1
-	scale := s.Scale
+	scale := helper.(distanceHelper).Scale
 	for i, key := range srcKeys[1:] {
 		for dstKeys[end] != key {
 			end++
@@ -132,8 +137,10 @@ func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int) {
 	}
 }
 
-func (s *distanceStrategy) GenerateScale(dis []int, keys, compactKeys []string, tempDis []int, tempMap map[int]float64) ([]float64, []int) {
-	scale := make([]float64, len(dis))
+func (s *distanceStrategy) GenerateScale(dis []int, maxDis int, keys, compactKeys []string) (scale []float64) {
+	scale = make([]float64, len(dis))
+	var tempDis []int
+	tempMap := make([]float64, maxDis+1)
 	start := 0
 	for startKey := keys[0]; compactKeys[start] != startKey; start++ {
 	}
@@ -174,7 +181,7 @@ func (s *distanceStrategy) GenerateScale(dis []int, keys, compactKeys []string, 
 		}
 		end++
 	}
-	return scale, tempDis
+	return
 }
 
 func updateLeftDis(dis, leftDis []int, keys, compactKeys []string) {
@@ -202,9 +209,11 @@ func updateRightDis(dis, rightDis []int, keys, compactKeys []string) {
 	}
 }
 
-func toBucketDis(dis []int) []int {
+func toBucketDis(dis []int) ([]int, int) {
+	maxDis := 0
 	for i := len(dis) - 1; i > 0; i-- {
 		dis[i] = Max(dis[i], dis[i-1])
+		maxDis = Max(maxDis, dis[i])
 	}
-	return dis[1:]
+	return dis[1:], maxDis
 }

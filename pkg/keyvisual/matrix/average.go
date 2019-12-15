@@ -13,6 +13,9 @@
 
 package matrix
 
+type averageHelper struct {
+}
+
 type averageStrategy struct {
 	LabelStrategy
 }
@@ -23,11 +26,11 @@ func AverageStrategy(label LabelStrategy) Strategy {
 	}
 }
 
-func (_ averageStrategy) Start(_ []chunk, _ []string) {}
+func (_ averageStrategy) GenerateHelper(_ []chunk, _ []string) interface{} {
+	return averageHelper{}
+}
 
-func (_ averageStrategy) End() {}
-
-func (_ averageStrategy) SplitTo(dst, src chunk, _ int) {
+func (_ averageStrategy) SplitTo(dst, src chunk, _ int, _ interface{}) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
 	srcKeys := src.Keys
@@ -55,7 +58,7 @@ func (_ averageStrategy) SplitTo(dst, src chunk, _ int) {
 	}
 }
 
-func (_ averageStrategy) SplitAdd(dst, src chunk, _ int) {
+func (_ averageStrategy) SplitAdd(dst, src chunk, _ int, _ interface{}) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
 	srcKeys := src.Keys
