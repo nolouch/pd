@@ -136,6 +136,7 @@ func (s *Stat) StorageAxis(regions []*core.RegionInfo) matrix.Axis {
 	for i, tag := range responseTags {
 		valuesList[i] = getValues(regions, tag)
 	}
+	matrix.SaveKeys(keys)
 	preAxis := matrix.CreateAxis(keys, valuesList)
 
 	target := maxDisplayY
@@ -192,6 +193,7 @@ func scanRegions(cluster *server.RaftCluster) ([]*core.RegionInfo, time.Time) {
 	return regions, time.Now()
 }
 
+// TODO: use server/core/region.go version
 func String(b []byte) (s string) {
 	if len(b) == 0 {
 		return ""
