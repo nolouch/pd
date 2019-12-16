@@ -14,6 +14,7 @@
 package matrix
 
 import (
+	"sync"
 	"time"
 )
 
@@ -70,16 +71,27 @@ func (plane *Plane) Pixel(strategy Strategy, target int, displayTags []string) M
 	compactChunk, helper := compact(strategy, chunks)
 	baseKeys := compactChunk.Divide(strategy, target)
 	matrix := createMatrix(strategy, plane.Times, baseKeys, valuesListLen)
-	for j := 0; j < valuesListLen; j++ {
+
+	var wg sync.WaitGroup
+	var mutex sync.Mutex
+	generateFunc := func(j int) {
 		data := make([][]uint64, axesLen)
+		goCompactChunk := createZeroChunk(compactChunk.Keys)
 		for i, axis := range plane.Axes {
-			compactChunk.Clear()
-			chunks[i].SetValues(axis.ValuesList[j])
-			strategy.SplitTo(compactChunk, chunks[i], i, helper)
-			data[i] = compactChunk.Reduce(baseKeys).Values
+			goCompactChunk.Clear()
+			strategy.SplitTo(goCompactChunk, createChunk(chunks[i].Keys, axis.ValuesList[j]), i, helper)
+			data[i] = goCompactChunk.Reduce(baseKeys).Values
 		}
+		mutex.Lock()
 		matrix.DataMap[displayTags[j]] = data
+		mutex.Unlock()
+		wg.Done()
 	}
+	wg.Add(valuesListLen)
+	for j := 0; j < valuesListLen; j++ {
+		go generateFunc(j)
+	}
+	wg.Wait()
 	return matrix
 }
 
