@@ -30,7 +30,12 @@ import (
 	"go.uber.org/zap"
 )
 
-const maxDisplayY = 1500
+const (
+	maxDisplayY    = 1536
+	preThreshold   = 128
+	preRatioTarget = 512
+	preTarget      = 1024
+)
 
 var (
 	defaultLayersConfig = LayersConfig{

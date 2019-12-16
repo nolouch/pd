@@ -136,11 +136,10 @@ func (s *Stat) StorageAxis(regions []*core.RegionInfo) matrix.Axis {
 	for i, tag := range responseTags {
 		valuesList[i] = getValues(regions, tag)
 	}
-	matrix.SaveKeys(keys)
-	preAxis := matrix.CreateAxis(keys, valuesList)
 
-	target := maxDisplayY
-	focusAxis := preAxis.Focus(s.strategy, 1, len(keys)/target, target)
+	preAxis := matrix.CreateAxis(keys, valuesList)
+	focusAxis := preAxis.Focus(s.strategy, preThreshold, len(keys)/preRatioTarget, preTarget)
+	matrix.SaveKeys(focusAxis.Keys)
 
 	// responseTags -> storageTags
 	var storageValuesList [][]uint64
