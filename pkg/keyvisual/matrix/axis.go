@@ -51,10 +51,8 @@ func CreateEmptyAxis(startKey, endKey string, valuesListLen int) Axis {
 	for i := range valuesList {
 		valuesList[i] = values
 	}
-	return Axis{
-		Keys:       keys,
-		ValuesList: valuesList,
-	}
+	SaveKeys(keys)
+	return CreateAxis(keys, valuesList)
 }
 
 // Range return a key-axis with specified range.
@@ -187,7 +185,7 @@ func (c *chunk) Reduce(newKeys []string) chunk {
 	endKeys := newKeys[1:]
 	j := 0
 	for i, value := range c.Values {
-		if keys[i] == endKeys[j] {
+		if equal(keys[i], endKeys[j]) {
 			j++
 		}
 		newValues[j] += value

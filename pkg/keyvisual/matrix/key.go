@@ -11,19 +11,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package keyvisual
+package matrix
 
 import (
-	"fmt"
-	"os"
-	"runtime/debug"
+	"reflect"
+	"sync"
+	"unsafe"
 )
 
-func perr(err error) {
-	if err == nil {
-		return
+var keyMap sync.Map
+
+// FIXME: GC useless keys
+func SaveKeys(keys []string) {
+	for i, key := range keys {
+		hashedKey, _ := keyMap.LoadOrStore(key, key)
+		keys[i] = hashedKey.(string)
 	}
-	fmt.Println(err.Error())
-	debug.PrintStack()
-	os.Exit(1)
+}
+
+func equal(keyA, keyB string) bool {
+	pA := (*reflect.StringHeader)(unsafe.Pointer(&keyA))
+	pB := (*reflect.StringHeader)(unsafe.Pointer(&keyB))
+	return pA.Data == pB.Data && pA.Len == pB.Len
 }

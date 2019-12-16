@@ -136,10 +136,10 @@ func (s *Stat) StorageAxis(regions []*core.RegionInfo) matrix.Axis {
 	for i, tag := range responseTags {
 		valuesList[i] = getValues(regions, tag)
 	}
-	preAxis := matrix.CreateAxis(keys, valuesList)
 
-	target := maxDisplayY
-	focusAxis := preAxis.Focus(s.strategy, 1, len(keys)/target, target)
+	preAxis := matrix.CreateAxis(keys, valuesList)
+	focusAxis := preAxis.Focus(s.strategy, preThreshold, len(keys)/preRatioTarget, preTarget)
+	matrix.SaveKeys(focusAxis.Keys)
 
 	// responseTags -> storageTags
 	var storageValuesList [][]uint64
@@ -192,6 +192,7 @@ func scanRegions(cluster *server.RaftCluster) ([]*core.RegionInfo, time.Time) {
 	return regions, time.Now()
 }
 
+// TODO: use server/core/region.go version
 func String(b []byte) (s string) {
 	if len(b) == 0 {
 		return ""

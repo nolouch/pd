@@ -90,12 +90,12 @@ func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int, helper interfa
 	}
 
 	start := 0
-	for startKey := srcKeys[0]; dstKeys[start] != startKey; start++ {
+	for startKey := srcKeys[0]; !equal(dstKeys[start], startKey); start++ {
 	}
 	end := start + 1
 	scale := helper.(distanceHelper).Scale
 	for i, key := range srcKeys[1:] {
-		for dstKeys[end] != key {
+		for !equal(dstKeys[end], key) {
 			end++
 		}
 		value := srcValues[i]
@@ -121,12 +121,12 @@ func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int, helper interf
 	}
 
 	start := 0
-	for startKey := srcKeys[0]; dstKeys[start] != startKey; start++ {
+	for startKey := srcKeys[0]; !equal(dstKeys[start], startKey); start++ {
 	}
 	end := start + 1
 	scale := helper.(distanceHelper).Scale
 	for i, key := range srcKeys[1:] {
-		for dstKeys[end] != key {
+		for !equal(dstKeys[end], key) {
 			end++
 		}
 		value := srcValues[i]
@@ -142,11 +142,11 @@ func (s *distanceStrategy) GenerateScale(dis []int, maxDis int, keys, compactKey
 	var tempDis []int
 	tempMap := make([]float64, maxDis+1)
 	start := 0
-	for startKey := keys[0]; compactKeys[start] != startKey; start++ {
+	for startKey := keys[0]; !equal(compactKeys[start], startKey); start++ {
 	}
 	end := start + 1
 	for _, key := range keys[1:] {
-		for compactKeys[end] != key {
+		for !equal(compactKeys[end], key) {
 			end++
 		}
 		if start+1 == end {
@@ -188,7 +188,7 @@ func updateLeftDis(dis, leftDis []int, keys, compactKeys []string) {
 	CheckPartOf(compactKeys, keys)
 	j := 0
 	for i := range dis {
-		if compactKeys[i] == keys[j] {
+		if equal(compactKeys[i], keys[j]) {
 			dis[i] = 0
 			j++
 		} else {
@@ -200,7 +200,7 @@ func updateLeftDis(dis, leftDis []int, keys, compactKeys []string) {
 func updateRightDis(dis, rightDis []int, keys, compactKeys []string) {
 	j := 0
 	for i := range dis {
-		if compactKeys[i] == keys[j] {
+		if equal(compactKeys[i], keys[j]) {
 			dis[i] = 0
 			j++
 		} else {

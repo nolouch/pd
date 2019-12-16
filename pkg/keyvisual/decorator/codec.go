@@ -16,7 +16,9 @@ package decorator
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"reflect"
 	"strings"
+	"unsafe"
 )
 
 var (
@@ -121,4 +123,16 @@ func appendTableIndexPrefix(buf []byte, tableID int64) []byte {
 	buf = EncodeInt(buf, tableID)
 	buf = append(buf, indexPrefixSep...)
 	return buf
+}
+
+func Bytes(s string) (b []byte) {
+	if len(s) == 0 {
+		return
+	}
+	pbytes := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	pstring := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	pbytes.Data = pstring.Data
+	pbytes.Len = pstring.Len
+	pbytes.Cap = pstring.Len
+	return
 }

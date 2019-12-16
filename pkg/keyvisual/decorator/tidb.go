@@ -97,13 +97,18 @@ type TiDBLabelStrategy struct{}
 
 func (_ TiDBLabelStrategy) CrossBorder(startKey, endKey string) bool {
 	// TODO: Unsafe conversion
-	startBytes, endBytes := []byte(startKey), []byte(endKey)
-	startIsMeta, startTableID := codec.Key(startBytes).MetaOrTable()
-	endIsMeta, endTableID := codec.Key(endBytes).MetaOrTable()
+	startBytes, endBytes := codec.Key(Bytes(startKey)), codec.Key(Bytes(endKey))
+	startIsMeta, startTableID := startBytes.MetaOrTable()
+	endIsMeta, endTableID := endBytes.MetaOrTable()
 	if startIsMeta || endIsMeta {
 		return startIsMeta != endIsMeta
 	}
-	return startTableID != endTableID
+	if startTableID != endTableID {
+		return true
+	}
+	startIndex := startBytes.IndexID()
+	endIndex := endBytes.IndexID()
+	return startIndex != endIndex
 }
 
 // Fixme: the label information should get from tidb.
