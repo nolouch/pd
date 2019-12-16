@@ -17,7 +17,6 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -74,7 +73,7 @@ func RegisterService(svr *server.Server) (http.Handler, server.APIGroup) {
 	return k, defaultRegisterAPIGroupInfo
 }
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("DebugTop:", r.RequestURI)
+	log.Info("DebugTop", zap.String("RequestURI", r.RequestURI))
 	s.ServeMux.ServeHTTP(w, r)
 }
 
@@ -84,10 +83,11 @@ func (s *Service) Run() {
 }
 
 func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
-	log.Info("Start Services")
+	log.Info("Start Services", zap.String("RequestURI", r.RequestURI))
 	defer log.Info("End Service")
-	fmt.Println("Debug:", r.RequestURI)
+
 	w.Header().Set("Content-type", "application/json")
+
 	form := r.URL.Query()
 	startKey := form.Get("startkey")
 	endKey := form.Get("endkey")
@@ -98,18 +98,18 @@ func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
 	startTime := endTime.Add(-1200 * time.Minute)
 
 	if startTimeString != "" {
-		tsSec, err := strconv.ParseInt(startTimeString, 10, 64)
-		if err != nil {
+		if tsSec, err := strconv.ParseInt(startTimeString, 10, 64); err == nil {
+			startTime = time.Unix(tsSec, 0)
+		} else {
 			log.Error("parse ts failed", zap.Error(err))
 		}
-		startTime = time.Unix(tsSec, 0)
 	}
 	if endTimeString != "" {
-		tsSec, err := strconv.ParseInt(endTimeString, 10, 64)
-		if err != nil {
+		if tsSec, err := strconv.ParseInt(endTimeString, 10, 64); err == nil {
+			endTime = time.Unix(tsSec, 0)
+		} else {
 			log.Error("parse ts failed", zap.Error(err))
 		}
-		endTime = time.Unix(tsSec, 0)
 	}
 
 	log.Info("Request matrix",
@@ -130,13 +130,17 @@ func (s *Service) Heatmap(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Encoding", "gzip")
 		gz := gzip.NewWriter(w)
 		defer func() {
-			perr(gz.Close())
+			if err := gz.Close(); err != nil {
+				log.Warn("gzip close error", zap.Error(err))
+			}
 		}()
 		encoder = json.NewEncoder(gz)
 	} else {
 		encoder = json.NewEncoder(w)
 	}
-	perr(encoder.Encode(mx))
+	if err := encoder.Encode(mx); err != nil {
+		log.Warn("json encode or write error", zap.Error(err))
+	}
 }
 
 func (s *Service) updateStat(ctx context.Context) {

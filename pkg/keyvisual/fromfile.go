@@ -52,11 +52,9 @@ func scanRegionsFromFile() ([]*core.RegionInfo, time.Time) {
 	fileNow := fileNextTime
 	fileNextTime = fileNow.Add(fileTimeDelta)
 	fileName := fileNow.Format("./data/20060102-15-04.json")
-	jsonFile, err := os.Open(fileName)
-	if err == nil {
+	if jsonFile, err := os.Open(fileName); err == nil {
 		defer jsonFile.Close()
-		byteValue, err := ioutil.ReadAll(jsonFile)
-		if err == nil {
+		if byteValue, err := ioutil.ReadAll(jsonFile); err == nil {
 			var apiRes api.RegionsInfo
 			json.Unmarshal(byteValue, &apiRes)
 			regions := apiRes.Regions
