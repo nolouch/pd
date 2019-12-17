@@ -30,7 +30,7 @@ func (_ averageStrategy) GenerateHelper(_ []chunk, _ []string) interface{} {
 	return averageHelper{}
 }
 
-func (_ averageStrategy) SplitTo(dst, src chunk, _ int, _ interface{}) {
+func (_ averageStrategy) Split(dst, src chunk, _ int, _ interface{}, tag splitTag) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
 	srcKeys := src.Keys
@@ -46,44 +46,31 @@ func (_ averageStrategy) SplitTo(dst, src chunk, _ int, _ interface{}) {
 	for startKey := srcKeys[0]; !equal(dstKeys[start], startKey); start++ {
 	}
 	end := start + 1
-	for i, key := range srcKeys[1:] {
-		for !equal(dstKeys[end], key) {
+
+	switch tag {
+	case splitTo:
+		for i, key := range srcKeys[1:] {
+			for !equal(dstKeys[end], key) {
+				end++
+			}
+			value := srcValues[i] / uint64(end-start)
+			for ; start < end; start++ {
+				dstValues[start] = value
+			}
 			end++
 		}
-		value := srcValues[i] / uint64(end-start)
-		for ; start < end; start++ {
-			dstValues[start] = value
-		}
-		end++
-	}
-}
-
-func (_ averageStrategy) SplitAdd(dst, src chunk, _ int, _ interface{}) {
-	dstKeys := dst.Keys
-	dstValues := dst.Values
-	srcKeys := src.Keys
-	srcValues := src.Values
-	CheckPartOf(dstKeys, srcKeys)
-
-	if len(dstKeys) == len(srcKeys) {
-		for i, v := range srcValues {
-			dstValues[i] += v
-		}
-		return
-	}
-
-	start := 0
-	for startKey := srcKeys[0]; !equal(dstKeys[start], startKey); start++ {
-	}
-	end := start + 1
-	for i, key := range srcKeys[1:] {
-		for !equal(dstKeys[end], key) {
+	case splitAdd:
+		for i, key := range srcKeys[1:] {
+			for !equal(dstKeys[end], key) {
+				end++
+			}
+			value := srcValues[i] / uint64(end-start)
+			for ; start < end; start++ {
+				dstValues[start] += value
+			}
 			end++
 		}
-		value := srcValues[i] / uint64(end-start)
-		for ; start < end; start++ {
-			dstValues[start] += value
-		}
-		end++
+	default:
+		panic("unreachable")
 	}
 }

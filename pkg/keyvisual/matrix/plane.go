@@ -51,7 +51,7 @@ func (plane *Plane) Compact(strategy Strategy) Axis {
 		compactChunk.SetZeroValues()
 		for i, axis := range plane.Axes {
 			chunks[i].SetValues(axis.ValuesList[j])
-			strategy.SplitAdd(compactChunk, chunks[i], i, helper)
+			strategy.Split(compactChunk, chunks[i], i, helper, splitAdd)
 		}
 		valuesList[j] = compactChunk.Values
 	}
@@ -79,7 +79,7 @@ func (plane *Plane) Pixel(strategy Strategy, target int, displayTags []string) M
 		goCompactChunk := createZeroChunk(compactChunk.Keys)
 		for i, axis := range plane.Axes {
 			goCompactChunk.Clear()
-			strategy.SplitTo(goCompactChunk, createChunk(chunks[i].Keys, axis.ValuesList[j]), i, helper)
+			strategy.Split(goCompactChunk, createChunk(chunks[i].Keys, axis.ValuesList[j]), i, helper, splitTo)
 			data[i] = goCompactChunk.Reduce(baseKeys).Values
 		}
 		mutex.Lock()
@@ -114,7 +114,7 @@ func compact(strategy Strategy, chunks []chunk) (compactChunk chunk, helper inte
 	compactChunk = createZeroChunk(MakeKeys(keySet, unlimitedEnd))
 	helper = strategy.GenerateHelper(chunks, compactChunk.Keys)
 	for i, c := range chunks {
-		strategy.SplitAdd(compactChunk, c, i, helper)
+		strategy.Split(compactChunk, c, i, helper, splitAdd)
 	}
 	return
 }
