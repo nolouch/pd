@@ -24,7 +24,7 @@ const (
 
 type splitStrategy interface {
 	GenerateHelper(chunks []chunk, compactKeys []string) interface{}
-	Split(dst, src chunk, axesIndex int, helper interface{}, tag splitTag)
+	Split(dst, src chunk, tag splitTag, axesIndex int, helper interface{})
 }
 
 // implemented in the decorator package
@@ -43,7 +43,7 @@ type Strategy interface {
 // Can be used when unit testing
 type NaiveLabelStrategy struct{}
 
-func (s NaiveLabelStrategy) CrossBorder(_, _ string) bool {
+func (s NaiveLabelStrategy) CrossBorder(_startKey, _endKey string) bool {
 	return false
 }
 

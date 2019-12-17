@@ -26,11 +26,11 @@ func AverageStrategy(label LabelStrategy) Strategy {
 	}
 }
 
-func (_ averageStrategy) GenerateHelper(_ []chunk, _ []string) interface{} {
+func (averageStrategy) GenerateHelper(_chunks []chunk, _compactKeys []string) interface{} {
 	return averageHelper{}
 }
 
-func (_ averageStrategy) Split(dst, src chunk, _ int, _ interface{}, tag splitTag) {
+func (averageStrategy) Split(dst, src chunk, tag splitTag, _axesIndex int, _helper interface{}) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
 	srcKeys := src.Keys

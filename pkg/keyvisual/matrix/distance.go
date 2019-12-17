@@ -89,7 +89,7 @@ func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) 
 	return distanceHelper{Scale: scale}
 }
 
-func (s *distanceStrategy) Split(dst, src chunk, axesIndex int, helper interface{}, tag splitTag) {
+func (s *distanceStrategy) Split(dst, src chunk, tag splitTag, axesIndex int, helper interface{}) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
 	srcKeys := src.Keys

@@ -16,7 +16,6 @@ package decorator
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -43,15 +42,22 @@ type tableInfo struct {
 	} `json:"index_info"`
 }
 
-func request(addr string, uri string, v interface{}) {
+func request(addr string, uri string, v interface{}) error {
 	resp, err := http.Get(fmt.Sprintf("%s/%s", addr, uri))
-	perr(err)
-	r, err := ioutil.ReadAll(resp.Body)
-	perr(err)
-	err = resp.Body.Close()
-	perr(err)
-	err = json.Unmarshal([]byte(r), v)
-	perr(err)
+	if err != nil {
+		return err
+	}
+
+	decoder := json.NewDecoder(resp.Body)
+	if err = decoder.Decode(v); err != nil {
+		return err
+	}
+
+	if err = resp.Body.Close(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func dbRequest(limit uint64) []*dbInfo {
