@@ -55,6 +55,14 @@ func CreateEmptyAxis(startKey, endKey string, valuesListLen int) Axis {
 	return CreateAxis(keys, valuesList)
 }
 
+func (axis *Axis) Shrink(ratio uint64) {
+	for _, values := range axis.ValuesList {
+		for i := range values {
+			values[i] /= ratio
+		}
+	}
+}
+
 // Range return a key-axis with specified range.
 func (axis *Axis) Range(startKey string, endKey string) Axis {
 	if endKey != "" && startKey >= endKey {
