@@ -22,10 +22,11 @@ import (
 var keyMap sync.Map
 
 // FIXME: GC useless keys
+// Let equal strings have equal Data pointers.
 func SaveKeys(keys []string) {
 	for i, key := range keys {
-		hashedKey, _ := keyMap.LoadOrStore(key, key)
-		keys[i] = hashedKey.(string)
+		uniqueKey, _ := keyMap.LoadOrStore(key, key)
+		keys[i] = uniqueKey.(string)
 	}
 }
 
