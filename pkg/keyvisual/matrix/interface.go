@@ -15,28 +15,35 @@ package matrix
 
 import "encoding/hex"
 
-// TODO:
-// * Multiplexing data between requests
-// * Limit memory usage.
+type splitTag int
+
+const (
+	splitTo  splitTag = iota // Direct assignment after split
+	splitAdd                 // Add to original value after split
+)
+
 type splitStrategy interface {
 	GenerateHelper(chunks []chunk, compactKeys []string) interface{}
-	SplitTo(dst, src chunk, axesIndex int, helper interface{})
-	SplitAdd(dst, src chunk, axesIndex int, helper interface{})
+	Split(dst, src chunk, tag splitTag, axesIndex int, helper interface{})
 }
 
+// implemented in the decorator package
 type LabelStrategy interface {
 	CrossBorder(startKey, endKey string) bool
 	Label(key string) LabelKey
 }
 
+// The complete interface required to call Pixel
 type Strategy interface {
 	splitStrategy
 	LabelStrategy
 }
 
+// One of the simplest LabelStrategy
+// Can be used when unit testing
 type NaiveLabelStrategy struct{}
 
-func (s NaiveLabelStrategy) CrossBorder(_, _ string) bool {
+func (s NaiveLabelStrategy) CrossBorder(_startKey, _endKey string) bool {
 	return false
 }
 

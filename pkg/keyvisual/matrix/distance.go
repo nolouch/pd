@@ -19,6 +19,10 @@ import (
 	"sync"
 )
 
+// TODO:
+// * Multiplexing data between requests
+// * Limit memory usage
+
 type distanceHelper struct {
 	Scale [][]float64
 }
@@ -40,32 +44,39 @@ func DistanceStrategy(label LabelStrategy, ratio float64, level int) Strategy {
 func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) interface{} {
 	axesLen := len(chunks)
 	keysLen := len(compactKeys)
-	virtualColumn := make([]int, keysLen)
-	MemsetInt(virtualColumn, axesLen)
-	dis := make([][]int, axesLen)
-	scale := make([][]float64, axesLen)
 
+	// generate key distance matrix
+	dis := make([][]int, axesLen)
 	for i := 0; i < axesLen; i++ {
 		dis[i] = make([]int, keysLen)
 	}
-	// left dis
+
+	// a column with the maximum value is virtualized on the right and left
+	virtualColumn := make([]int, keysLen)
+	MemsetInt(virtualColumn, axesLen)
+
+	// calculate left distance
 	updateLeftDis(dis[0], virtualColumn, chunks[0].Keys, compactKeys)
 	for i := 1; i < axesLen; i++ {
 		updateLeftDis(dis[i], dis[i-1], chunks[i].Keys, compactKeys)
 	}
-	// right dis
+	// calculate the nearest distance on both sides
 	end := axesLen - 1
 	updateRightDis(dis[end], virtualColumn, chunks[end].Keys, compactKeys)
 	for i := end - 1; i >= 0; i-- {
 		updateRightDis(dis[i], dis[i+1], chunks[i].Keys, compactKeys)
 	}
 
+	// multi-threaded calculate scale matrix.
+	// FIXME: Limit the number of concurrency
 	var wg sync.WaitGroup
+	scale := make([][]float64, axesLen)
 	generateFunc := func(i int) {
-		// key dis -> bucket dis
+		// The maximum distance between the StartKey and EndKey of a bucket
+		// is considered the bucket distance.
 		var maxDis int
 		dis[i], maxDis = toBucketDis(dis[i])
-		// bucket dis -> bucket scale
+		// The longer the distance, the lower the scale.
 		scale[i] = s.GenerateScale(dis[i], maxDis, chunks[i].Keys, compactKeys)
 		wg.Done()
 	}
@@ -74,10 +85,11 @@ func (s *distanceStrategy) GenerateHelper(chunks []chunk, compactKeys []string) 
 		go generateFunc(i)
 	}
 	wg.Wait()
+
 	return distanceHelper{Scale: scale}
 }
 
-func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int, helper interface{}) {
+func (s *distanceStrategy) Split(dst, src chunk, tag splitTag, axesIndex int, helper interface{}) {
 	dstKeys := dst.Keys
 	dstValues := dst.Values
 	srcKeys := src.Keys
@@ -94,69 +106,63 @@ func (s *distanceStrategy) SplitTo(dst, src chunk, axesIndex int, helper interfa
 	}
 	end := start + 1
 	scale := helper.(distanceHelper).Scale
-	for i, key := range srcKeys[1:] {
-		for !equal(dstKeys[end], key) {
+
+	switch tag {
+	case splitTo:
+		for i, key := range srcKeys[1:] {
+			for !equal(dstKeys[end], key) {
+				end++
+			}
+			value := srcValues[i]
+			for ; start < end; start++ {
+				dstValues[start] = uint64(float64(value) * scale[axesIndex][start])
+			}
 			end++
 		}
-		value := srcValues[i]
-		for ; start < end; start++ {
-			dstValues[start] = uint64(float64(value) * scale[axesIndex][start])
-		}
-		end++
-	}
-}
-
-func (s *distanceStrategy) SplitAdd(dst, src chunk, axesIndex int, helper interface{}) {
-	dstKeys := dst.Keys
-	dstValues := dst.Values
-	srcKeys := src.Keys
-	srcValues := src.Values
-	CheckPartOf(dstKeys, srcKeys)
-
-	if len(dstKeys) == len(srcKeys) {
-		for i, v := range srcValues {
-			dstValues[i] += v
-		}
-		return
-	}
-
-	start := 0
-	for startKey := srcKeys[0]; !equal(dstKeys[start], startKey); start++ {
-	}
-	end := start + 1
-	scale := helper.(distanceHelper).Scale
-	for i, key := range srcKeys[1:] {
-		for !equal(dstKeys[end], key) {
+	case splitAdd:
+		for i, key := range srcKeys[1:] {
+			for !equal(dstKeys[end], key) {
+				end++
+			}
+			value := srcValues[i]
+			for ; start < end; start++ {
+				dstValues[start] += uint64(float64(value) * scale[axesIndex][start])
+			}
 			end++
 		}
-		value := srcValues[i]
-		for ; start < end; start++ {
-			dstValues[start] += uint64(float64(value) * scale[axesIndex][start])
-		}
-		end++
+	default:
+		panic("unreachable")
 	}
 }
 
 func (s *distanceStrategy) GenerateScale(dis []int, maxDis int, keys, compactKeys []string) (scale []float64) {
 	scale = make([]float64, len(dis))
+
+	// Each split interval needs to be sorted after copying to tempDis
 	var tempDis []int
+	// Used as a mapping from distance to scale
 	tempMap := make([]float64, maxDis+1)
+
 	start := 0
 	for startKey := keys[0]; !equal(compactKeys[start], startKey); start++ {
 	}
 	end := start + 1
+
 	for _, key := range keys[1:] {
 		for !equal(compactKeys[end], key) {
 			end++
 		}
+
 		if start+1 == end {
+			// Optimize calculation when splitting into 1
 			scale[start] = 1.0
 			start++
 		} else {
-			// copy tempDis and calculate the top n levels
+			// Copy tempDis and calculate the top n levels
 			tempDis = append(tempDis[:0], dis[start:end]...)
 			tempLen := len(tempDis)
 			sort.Ints(tempDis)
+			// Calculate distribution factors and sums based on distance ordering
 			level := 0
 			tempMap[tempDis[0]] = 1.0
 			tempValue := 1.0
@@ -174,7 +180,7 @@ func (s *distanceStrategy) GenerateScale(dis []int, maxDis int, keys, compactKey
 				}
 				tempSum += tempValue
 			}
-			// calculate scale
+			// Calculate scale
 			for ; start < end; start++ {
 				scale[start] = tempMap[dis[start]] / tempSum
 			}

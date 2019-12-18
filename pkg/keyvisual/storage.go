@@ -79,6 +79,7 @@ func (s *layerStat) Reduce() {
 
 	plane := matrix.CreatePlane(times, axes)
 	newAxis := plane.Compact(s.Strategy)
+	newAxis.Shrink(uint64(s.Ratio))
 	s.Next.Append(newAxis, s.StartTime)
 }
 
