@@ -182,6 +182,7 @@ func (c *client) updateURLs(members []*pdpb.Member) {
 	for _, m := range members {
 		urls = append(urls, m.GetClientUrls()...)
 	}
+	log.Info("[pd] update member urls", zap.Strings("urls", urls))
 	c.urls = urls
 }
 
