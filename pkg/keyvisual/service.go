@@ -39,9 +39,10 @@ const (
 
 var (
 	defaultLayersConfig = LayersConfig{
-		{Len: 60 * 24, Ratio: 15},
-		{Len: 60 / 15 * 24 * 7, Ratio: 60 / 15},
-		{Len: 24 * 30, Ratio: 0},
+		{Len: 60, Ratio: 2},                         // step 1 mins, total 30, 1 hour
+		{Len: 60 / 2 * 24, Ratio: 30 / 2},           // step 2 mins, total 720, 1 day
+		{Len: 60 / 30 * 24 * 7, Ratio: 5 * 60 / 30}, // step 30 mins, total 336, 1 week
+		{Len: 24 * 30 / 5, Ratio: 0},                // step 5 hours, total 144, 1mount
 	}
 
 	defaultRegisterAPIGroupInfo = server.APIGroup{
