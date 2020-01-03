@@ -10,7 +10,7 @@ func AssertEqual(t *testing.T, e, a interface{}) {
 		return
 	}
 	if !reflect.DeepEqual(e, a) {
-		t.Fatalf("Expected `%+v`, got `%+v", e, a)
+		t.Fatalf("Expected `%+v`, got `%+v`", e, a)
 	}
 }
 
@@ -43,4 +43,19 @@ func isNil(v interface{}) bool {
 func PanicExists(t *testing.T) {
 	e := recover()
 	AssertNotNil(t, e)
+}
+
+func AssertTwoDimUint64ArrayAllEqual(t *testing.T, array [][]uint64, targetValue uint64) {
+	for _, subArray := range array {
+		for index := range subArray {
+			AssertEqual(t, subArray[index], targetValue)
+		}
+	}
+}
+
+func AssertArrayEqual(t *testing.T, array1 []uint64, array2 []uint64) {
+	AssertEqual(t, len(array1), len(array2))
+	for idx := range array1 {
+		AssertEqual(t, array1[idx], array2[idx])
+	}
 }
