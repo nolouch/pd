@@ -56,6 +56,7 @@ func CreateEmptyAxis(startKey, endKey string, valuesListLen int) Axis {
 }
 
 func (axis *Axis) Shrink(ratio uint64) {
+	ratio = UInt64Max(ratio, 1)
 	for _, values := range axis.ValuesList {
 		for i := range values {
 			values[i] /= ratio
