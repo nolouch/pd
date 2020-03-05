@@ -43,10 +43,10 @@ const (
 
 var (
 	historyKeepTime    = 5 * time.Minute
-	slowNotifyInterval = 5 * time.Second
-	fastNotifyInterval = 520 * time.Millisecond
+	slowNotifyInterval = 700 * time.Millisecond
+	fastNotifyInterval = 500 * time.Millisecond
 	// PushOperatorTickInterval is the interval try to push the operator.
-	PushOperatorTickInterval = 500 * time.Millisecond
+	PushOperatorTickInterval = 200 * time.Millisecond
 	// StoreBalanceBaseTime represents the base time of balance rate.
 	StoreBalanceBaseTime float64 = 60
 )
