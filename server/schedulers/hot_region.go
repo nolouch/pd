@@ -65,7 +65,7 @@ const (
 
 	maxPeerNum = 1000
 
-	maxZombieDur time.Duration = statistics.StoreHeartBeatReportInterval * time.Second
+	maxZombieDur time.Duration = 5 * statistics.StoreHeartBeatReportInterval * time.Second
 
 	minRegionScheduleInterval time.Duration = statistics.StoreHeartBeatReportInterval * time.Second
 
@@ -228,7 +228,11 @@ func (h *hotScheduler) gcRegionPendings() {
 		empty := true
 		for ty, op := range pendings {
 			if op != nil && op.IsEnd() {
-				if time.Now().After(op.GetCreateTime().Add(minRegionScheduleInterval)) {
+				lazyTime := minRegionScheduleInterval
+				if op.Kind()&(operator.OpRegion|operator.OpLeader) == operator.OpLeader {
+					lazyTime *= 3
+				}
+				if time.Now().After(op.GetCreateTime().Add(lazyTime)) {
 					schedulerStatus.WithLabelValues(h.GetName(), "pending_op_infos").Dec()
 					pendings[ty] = nil
 				}
@@ -399,6 +403,7 @@ type solution struct {
 	// The smaller the rank, the better this solution is.
 	// If rank < 0, this solution makes thing better.
 	progressiveRank int64
+	attachInfo      string
 }
 
 func (bs *balanceSolver) init() {
@@ -499,7 +504,7 @@ func (bs *balanceSolver) solve() []*operator.Operator {
 			for dstStoreID := range bs.filterDstStores() {
 				bs.cur.dstStoreID = dstStoreID
 				bs.calcProgressiveRank()
-
+				//	bs.cur.attachInfo = fmt.Sprintf("start:{[%d]->[%d], rank: %d, region: %d}\t", bs.cur.srcStoreID, bs.cur.dstStoreID, bs.cur.progressiveRank, bs.cur.region.GetID())
 				if bs.cur.progressiveRank < 0 && bs.betterThan(best) {
 					if newOps, newInfls := bs.buildOperators(); len(newOps) > 0 {
 						ops = newOps
@@ -737,18 +742,21 @@ func (bs *balanceSolver) betterThan(old *solution) bool {
 	case bs.cur.progressiveRank < old.progressiveRank:
 		return true
 	case bs.cur.progressiveRank > old.progressiveRank:
+		//old.attachInfo += fmt.Sprintf("ko-rank:{[%d]->[%d], rank: %d, region: %d}\t", bs.cur.srcStoreID, bs.cur.dstStoreID, bs.cur.progressiveRank, bs.cur.region.GetID())
 		return false
 	}
 
 	if r := bs.compareSrcStore(bs.cur.srcStoreID, old.srcStoreID); r < 0 {
 		return true
 	} else if r > 0 {
+		//old.attachInfo += fmt.Sprintf("ko-src:{[%d] other-lood[:%+v], me-lood[:%+v]}", bs.cur.srcStoreID, *bs.stLoadDetail[bs.cur.srcStoreID].LoadPred, *bs.stLoadDetail[old.srcStoreID].LoadPred)
 		return false
 	}
 
 	if r := bs.compareDstStore(bs.cur.dstStoreID, old.dstStoreID); r < 0 {
 		return true
 	} else if r > 0 {
+		//old.attachInfo += fmt.Sprintf("ko-dst:{[%d] other-lood[:%+v], me-lood[:%+v]}", bs.cur.dstStoreID, *bs.stLoadDetail[bs.cur.dstStoreID].LoadPred, *bs.stLoadDetail[old.dstStoreID].LoadPred)
 		return false
 	}
 
