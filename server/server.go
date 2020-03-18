@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/pdpb"
 	log "github.com/pingcap/log"
 	"github.com/pingcap/pd/v3/pkg/etcdutil"
+	"github.com/pingcap/pd/v3/pkg/grpcutil"
 	"github.com/pingcap/pd/v3/pkg/logutil"
 	"github.com/pingcap/pd/v3/server/core"
 	"github.com/pingcap/pd/v3/server/namespace"
@@ -158,7 +159,7 @@ func (s *Server) startEtcd(ctx context.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	tlsConfig, err := ToTLSConfig(s.cfg.Security.ConvertToMap())
+	tlsConfig, err := s.cfg.Security.ToTLSConfig()
 	if err != nil {
 		return err
 	}
@@ -728,14 +729,14 @@ func (s *Server) GetClusterVersion() semver.Version {
 	return s.scheduleOpt.loadClusterVersion()
 }
 
-// GetSecurityConfig get paths of the security config.
-func (s *Server) GetSecurityConfig() map[string]string {
-	return s.cfg.Security.ConvertToMap()
-}
-
 // IsNamespaceExist returns whether the namespace exists.
 func (s *Server) IsNamespaceExist(name string) bool {
 	return s.classifier.IsNamespaceExist(name)
+}
+
+// GetSecurityConfig get the security config.
+func (s *Server) GetSecurityConfig() *grpcutil.SecurityConfig {
+	return &s.cfg.Security
 }
 
 func (s *Server) getClusterRootPath() string {

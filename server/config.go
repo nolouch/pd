@@ -14,7 +14,6 @@
 package server
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -27,13 +26,13 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/log"
+	"github.com/pingcap/pd/v3/pkg/grpcutil"
 	"github.com/pingcap/pd/v3/pkg/metricutil"
 	"github.com/pingcap/pd/v3/pkg/typeutil"
 	"github.com/pingcap/pd/v3/server/namespace"
 	"github.com/pingcap/pd/v3/server/schedule"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/embed"
-	"go.etcd.io/etcd/pkg/transport"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -113,7 +112,7 @@ type Config struct {
 	// an election, thus minimizing disruptions.
 	PreVote bool `toml:"enable-prevote"`
 
-	Security SecurityConfig `toml:"security" json:"security"`
+	Security grpcutil.SecurityConfig `toml:"security" json:"security"`
 
 	LabelProperty LabelPropertyConfig `toml:"label-property" json:"label-property"`
 
@@ -763,41 +762,6 @@ func (c *NamespaceConfig) adjust(opt *scheduleOption) {
 	adjustUint64(&c.MergeScheduleLimit, opt.GetMergeScheduleLimit(namespace.DefaultNamespace))
 	adjustUint64(&c.HotRegionScheduleLimit, opt.GetHotRegionScheduleLimit(namespace.DefaultNamespace))
 	adjustUint64(&c.MaxReplicas, uint64(opt.GetMaxReplicas(namespace.DefaultNamespace)))
-}
-
-// SecurityConfig is the configuration for supporting tls.
-type SecurityConfig struct {
-	// CAPath is the path of file that contains list of trusted SSL CAs. if set, following four settings shouldn't be empty
-	CAPath string `toml:"cacert-path" json:"cacert-path"`
-	// CertPath is the path of file that contains X509 certificate in PEM format.
-	CertPath string `toml:"cert-path" json:"cert-path"`
-	// KeyPath is the path of file that contains X509 key in PEM format.
-	KeyPath string `toml:"key-path" json:"key-path"`
-}
-
-// ConvertToMap is used to convert SecurityConfig to a map.
-func (s *SecurityConfig) ConvertToMap() map[string]string {
-	return map[string]string{
-		"caPath":   s.CAPath,
-		"certPath": s.CertPath,
-		"keyPath":  s.KeyPath}
-}
-
-// ToTLSConfig generatres tls config.
-func ToTLSConfig(config map[string]string) (*tls.Config, error) {
-	if len(config["certPath"]) == 0 && len(config["keyPath"]) == 0 {
-		return nil, nil
-	}
-	tlsInfo := transport.TLSInfo{
-		CertFile:      config["certPath"],
-		KeyFile:       config["keyPath"],
-		TrustedCAFile: config["caPath"],
-	}
-	tlsConfig, err := tlsInfo.ClientConfig()
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	return tlsConfig, nil
 }
 
 // PDServerConfig is the configuration for pd server.

@@ -24,8 +24,15 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
+)
+
+const (
+	keepaliveTime    = 10 * time.Second
+	keepaliveTimeout = 3 * time.Second
 )
 
 // StopSyncWithLeader stop to sync the region with leader.
@@ -42,40 +49,69 @@ func (s *RegionSyncer) reset() {
 	s.Lock()
 	defer s.Unlock()
 
-	if s.cancel == nil {
+	if s.regionSyncerCancel == nil {
 		return
 	}
-	s.cancel()
-	s.cancel, s.ctx = nil, nil
+	s.regionSyncerCancel, s.regionSyncerCtx = nil, nil
 }
 
-func (s *RegionSyncer) establish(addr string) (ClientStream, error) {
+func (s *RegionSyncer) establish(addr string) (*grpc.ClientConn, error) {
 	s.reset()
-
-	cc, err := grpcutil.GetClientConn(addr, s.securityConfig["caPath"], s.securityConfig["certPath"], s.securityConfig["keyPath"], grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(msgSize)))
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
 	ctx, cancel := context.WithCancel(s.server.Context())
-	client, err := pdpb.NewPDClient(cc).SyncRegions(ctx)
+	tslCfg, err := s.securityConfig.ToTLSConfig()
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	err = client.Send(&pdpb.SyncRegionRequest{
+	cc, err := grpcutil.GetClientConn(
+		ctx,
+		addr,
+		tslCfg,
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(msgSize)),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                keepaliveTime,
+			Timeout:             keepaliveTimeout,
+			PermitWithoutStream: true,
+		}),
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff: backoff.Config{
+				BaseDelay:  time.Second,     // Default was 1s.
+				Multiplier: 1.6,             // Default
+				Jitter:     0.2,             // Default
+				MaxDelay:   3 * time.Second, // Default was 120s.
+			},
+			MinConnectTimeout: 5 * time.Second,
+		}),
+		// WithBlock will block the dial step until success or cancel the context.
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		cancel()
+		return nil, errors.WithStack(err)
+	}
+
+	s.Lock()
+	s.regionSyncerCtx, s.regionSyncerCancel = ctx, cancel
+	s.Unlock()
+	return cc, nil
+}
+
+func (s *RegionSyncer) syncRegion(conn *grpc.ClientConn) (ClientStream, error) {
+	cli := pdpb.NewPDClient(conn)
+	syncStream, err := cli.SyncRegions(s.regionSyncerCtx)
+	if err != nil {
+		return syncStream, err
+	}
+	err = syncStream.Send(&pdpb.SyncRegionRequest{
 		Header:     &pdpb.RequestHeader{ClusterId: s.server.ClusterID()},
 		Member:     s.server.GetMemberInfo(),
 		StartIndex: s.history.GetNextIndex(),
 	})
 	if err != nil {
-		cancel()
-		return nil, err
+		return syncStream, err
 	}
-	s.Lock()
-	s.ctx, s.cancel = ctx, cancel
-	s.Unlock()
-	return client, nil
+
+	return syncStream, nil
 }
 
 // StartSyncWithLeader starts to sync with leader.
@@ -86,14 +122,33 @@ func (s *RegionSyncer) StartSyncWithLeader(addr string) {
 	s.RUnlock()
 	go func() {
 		defer s.wg.Done()
+
+		// establish client.
+		var conn *grpc.ClientConn
 		for {
 			select {
 			case <-closed:
 				return
 			default:
 			}
-			// establish client
-			client, err := s.establish(addr)
+			conn, err := s.establish(addr)
+			if err != nil {
+				log.Error("cannot establish connection with leader", zap.String("server", s.server.Name()), zap.String("leader", s.server.GetLeader().GetName()), zap.Error(err))
+				continue
+			}
+			defer conn.Close()
+			break
+		}
+
+		// Start syncing data.
+		for {
+			select {
+			case <-closed:
+				return
+			default:
+			}
+
+			stream, err := s.syncRegion(conn)
 			if err != nil {
 				if ev, ok := status.FromError(err); ok {
 					if ev.Code() == codes.Canceled {
@@ -106,10 +161,10 @@ func (s *RegionSyncer) StartSyncWithLeader(addr string) {
 			}
 			log.Info("server starts to synchronize with leader", zap.String("server", s.server.Name()), zap.String("leader", s.server.GetLeader().GetName()), zap.Uint64("request-index", s.history.GetNextIndex()))
 			for {
-				resp, err := client.Recv()
+				resp, err := stream.Recv()
 				if err != nil {
 					log.Error("region sync with leader meet error", zap.Error(err))
-					if err = client.CloseSend(); err != nil {
+					if err = stream.CloseSend(); err != nil {
 						log.Error("failed to terminate client stream", zap.Error(err))
 					}
 					time.Sleep(time.Second)

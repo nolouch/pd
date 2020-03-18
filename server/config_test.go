@@ -32,7 +32,7 @@ type testConfigSuite struct{}
 
 func (s *testConfigSuite) TestTLS(c *C) {
 	cfg := NewConfig()
-	tls, err := ToTLSConfig(cfg.Security.ConvertToMap())
+	tls, err := cfg.Security.ToTLSConfig()
 	c.Assert(err, IsNil)
 	c.Assert(tls, IsNil)
 }

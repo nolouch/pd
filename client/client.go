@@ -99,6 +99,7 @@ type tsoRequest struct {
 
 const (
 	pdTimeout             = 3 * time.Second
+	dialTimeout           = 3 * time.Second
 	updateLeaderTimeout   = time.Second // Use a shorter timeout to recover faster from network isolation.
 	maxMergeTSORequests   = 10000
 	maxInitClusterRetries = 100
@@ -307,7 +308,17 @@ func (c *client) getOrCreateGRPCConn(addr string) (*grpc.ClientConn, error) {
 		return conn, nil
 	}
 
-	cc, err := grpcutil.GetClientConn(addr, c.security.CAPath, c.security.CertPath, c.security.KeyPath, c.gRPCDialOptions...)
+	tlsCfg, err := grpcutil.SecurityConfig{
+		CAPath:   c.security.CAPath,
+		CertPath: c.security.CertPath,
+		KeyPath:  c.security.KeyPath,
+	}.ToTLSConfig()
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	dctx, cancel := context.WithTimeout(c.ctx, dialTimeout)
+	defer cancel()
+	cc, err := grpcutil.GetClientConn(dctx, addr, tlsCfg, c.gRPCDialOptions...)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
