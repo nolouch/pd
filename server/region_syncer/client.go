@@ -131,7 +131,8 @@ func (s *RegionSyncer) StartSyncWithLeader(addr string) {
 				return
 			default:
 			}
-			conn, err := s.establish(addr)
+			var err error
+			conn, err = s.establish(addr)
 			if err != nil {
 				log.Error("cannot establish connection with leader", zap.String("server", s.server.Name()), zap.String("leader", s.server.GetLeader().GetName()), zap.Error(err))
 				continue

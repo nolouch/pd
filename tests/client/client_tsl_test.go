@@ -157,13 +157,13 @@ func (s *clientTLSTestSuite) testTLSReload(
 	go func() {
 		for {
 			dctx, dcancel := context.WithTimeout(s.ctx, time.Second)
-			cli, err := pd.NewClientWithContext(dctx, endpoints, pd.SecurityOption{
+			cli, cerr := pd.NewClientWithContext(dctx, endpoints, pd.SecurityOption{
 				CAPath:   testClientTLSInfo.TrustedCAFile,
 				CertPath: testClientTLSInfo.CertFile,
 				KeyPath:  testClientTLSInfo.KeyFile,
 			}, pd.WithGRPCDialOptions(grpc.WithBlock()))
-			if err != nil {
-				errc <- err
+			if cerr != nil {
+				errc <- cerr
 				dcancel()
 				return
 			}
