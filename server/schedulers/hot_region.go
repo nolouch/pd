@@ -727,6 +727,12 @@ func (bs *balanceSolver) calcProgressiveRank() {
 			rank = -1
 		}
 	} else {
+		// In this condition, CPU usage is the matter.
+		// Only consider about count and key rate.
+		if srcLd.Count > dstLd.Count &&
+			srcLd.KeyRate >= dstLd.KeyRate+peer.GetKeyRate() {
+			rank = -1
+		}
 		keyDecRatio := (dstLd.KeyRate + peer.GetKeyRate()) / (srcLd.KeyRate + 1)
 		keyHot := peer.GetKeyRate() >= bs.sche.conf.GetMinHotKeyRate()
 		byteDecRatio := (dstLd.ByteRate + peer.GetByteRate()) / (srcLd.ByteRate + 1)
