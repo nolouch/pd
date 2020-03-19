@@ -831,7 +831,6 @@ func (bs *balanceSolver) compareSrcStore(st1, st2 uint64) int {
 					stLdRankCmp(stLdByteRate, stepRank(bs.maxSrc.ByteRate, bs.rankStep.ByteRate)),
 				))),
 				diffCmp(sliceLoadCmp(
-					stLdRankCmp(stLdCount, stepRank(0, bs.rankStep.Count)),
 					stLdRankCmp(stLdKeyRate, stepRank(0, bs.rankStep.KeyRate)),
 					stLdRankCmp(stLdByteRate, stepRank(0, bs.rankStep.ByteRate)),
 				)),
@@ -839,12 +838,14 @@ func (bs *balanceSolver) compareSrcStore(st1, st2 uint64) int {
 		} else {
 			lpCmp = sliceLPCmp(
 				minLPCmp(negLoadCmp(sliceLoadCmp(
+					stLdRankCmp(stLdCount, stepRank(bs.maxSrc.Count, bs.rankStep.Count)),
 					stLdRankCmp(stLdByteRate, stepRank(bs.maxSrc.ByteRate, bs.rankStep.ByteRate)),
 					stLdRankCmp(stLdKeyRate, stepRank(bs.maxSrc.KeyRate, bs.rankStep.KeyRate)),
 				))),
-				diffCmp(
+				diffCmp(sliceLoadCmp(
+					stLdRankCmp(stLdKeyRate, stepRank(0, bs.rankStep.KeyRate)),
 					stLdRankCmp(stLdByteRate, stepRank(0, bs.rankStep.ByteRate)),
-				),
+				)),
 			)
 		}
 
@@ -868,20 +869,20 @@ func (bs *balanceSolver) compareDstStore(st1, st2 uint64) int {
 					stLdRankCmp(stLdByteRate, stepRank(bs.minDst.ByteRate, bs.rankStep.ByteRate)),
 				)),
 				diffCmp(sliceLoadCmp(
-					stLdRankCmp(stLdCount, stepRank(0, bs.rankStep.Count)),
 					stLdRankCmp(stLdKeyRate, stepRank(0, bs.rankStep.KeyRate)),
 					stLdRankCmp(stLdByteRate, stepRank(0, bs.rankStep.ByteRate)),
 				)))
 		} else {
 			lpCmp = sliceLPCmp(
 				maxLPCmp(sliceLoadCmp(
+					stLdRankCmp(stLdCount, stepRank(bs.minDst.Count, bs.rankStep.Count)),
 					stLdRankCmp(stLdByteRate, stepRank(bs.minDst.ByteRate, bs.rankStep.ByteRate)),
 					stLdRankCmp(stLdKeyRate, stepRank(bs.minDst.KeyRate, bs.rankStep.KeyRate)),
 				)),
-				diffCmp(
+				diffCmp(sliceLoadCmp(
+					stLdRankCmp(stLdKeyRate, stepRank(0, bs.rankStep.KeyRate)),
 					stLdRankCmp(stLdByteRate, stepRank(0, bs.rankStep.ByteRate)),
-				),
-			)
+				)))
 		}
 
 		lp1 := bs.stLoadDetail[st1].LoadPred
