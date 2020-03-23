@@ -44,7 +44,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var backgroundJobInterval = time.Minute
+var backgroundJobInterval = 5 * time.Second
 
 const (
 	clientTimeout              = 3 * time.Second
