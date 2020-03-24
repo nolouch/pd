@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"net/http"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -515,7 +516,8 @@ func (bs *balanceSolver) solve() []*operator.Operator {
 
 	for i := 0; i < len(ops); i++ {
 		// TODO: multiple operators need to be atomic.
-		if !bs.sche.addPendingInfluence(ops[i], best.srcStoreID, best.dstStoreID, infls[i], bs.rwTy, bs.opTy) {
+		op := ops[i]
+		if !bs.sche.addPendingInfluence(op, best.srcStoreID, best.dstStoreID, infls[i], bs.rwTy, bs.opTy) {
 			return nil
 		}
 	}
@@ -924,6 +926,10 @@ func (bs *balanceSolver) buildOperators() ([]*operator.Operator, []Influence) {
 			operator.OpHotRegion,
 			bs.cur.srcStoreID,
 			dstPeer)
+
+		op.Counters = append(op.Counters, balanceHotRegionCounter.WithLabelValues("move-peer", strconv.FormatUint(bs.cur.srcStoreID, 10)+"-out"))
+		op.Counters = append(op.Counters, balanceHotRegionCounter.WithLabelValues("move-peer", strconv.FormatUint(dstPeer.GetStoreId(), 10)+"-in"))
+
 	case transferLeader:
 		if bs.cur.region.GetStoreVoter(bs.cur.dstStoreID) == nil {
 			return nil, nil
@@ -936,6 +942,8 @@ func (bs *balanceSolver) buildOperators() ([]*operator.Operator, []Influence) {
 			bs.cur.srcStoreID,
 			bs.cur.dstStoreID,
 			operator.OpHotRegion)
+		op.Counters = append(op.Counters, balanceHotRegionCounter.WithLabelValues("move-leader", strconv.FormatUint(bs.cur.srcStoreID, 10)+"-out"))
+		op.Counters = append(op.Counters, balanceHotRegionCounter.WithLabelValues("move-leader", strconv.FormatUint(bs.cur.dstStoreID, 10)+"-in"))
 	}
 
 	if err != nil {
@@ -1036,7 +1044,8 @@ func (h *hotScheduler) calcPendingWeight(op *operator.Operator) float64 {
 			return 0
 		}
 		// TODO: use store statistics update time to make a more accurate estimation
-		return float64(maxZombieDur-zombieDur) / float64(maxZombieDur)
+		//return float64(maxZombieDur-zombieDur) / float64(maxZombieDur)
+		return 1
 	default:
 		return 0
 	}
