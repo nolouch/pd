@@ -257,10 +257,14 @@ func summaryStoresLoad(
 	loadDetail := make(map[uint64]*storeLoadDetail, len(storeByteRate))
 
 	// Stores without byte rate statistics is not available to schedule.
+	allByteSum := 0.0
+	allKeySum := 0.0
+	allCount := 0.0
 	for id, byteRate := range storeByteRate {
 		keyRate := storeKeyRate[id]
 
 		// Find all hot peers first
+
 		hotPeers := make([]*statistics.HotPeerStat, 0)
 		{
 			byteSum := 0.0
@@ -287,6 +291,9 @@ func summaryStoresLoad(
 				hotPeerSummary.WithLabelValues(ty, fmt.Sprintf("%v", id)).Set(keySum)
 				hotPeerSummary.WithLabelValues(ty+"real", fmt.Sprintf("%v", id)).Set(keyRate)
 			}
+			allByteSum += byteSum
+			allKeySum += keySum
+			allCount += float64(len(hotPeers))
 		}
 
 		// Build store load prediction from current load and pending influence.
@@ -301,6 +308,13 @@ func summaryStoresLoad(
 			LoadPred: stLoadPred,
 			HotPeers: hotPeers,
 		}
+	}
+	storeLen := float64(len(storeByteRate))
+
+	for _, detail := range loadDetail {
+		detail.LoadPred.Future.ExpByteRate = allByteSum / storeLen
+		detail.LoadPred.Future.ExpKeyRate = allKeySum / storeLen
+		detail.LoadPred.Future.ExpCount = allCount / storeLen
 	}
 	return loadDetail
 }
@@ -547,7 +561,13 @@ func (bs *balanceSolver) filterSrcStores() map[uint64]*storeLoadDetail {
 		if len(detail.HotPeers) == 0 {
 			continue
 		}
-		ret[id] = detail
+		if detail.LoadPred.Current.ByteRate > 1.1*detail.LoadPred.Future.ExpByteRate &&
+			detail.LoadPred.Current.KeyRate > 1.1*detail.LoadPred.Future.ExpKeyRate &&
+			detail.LoadPred.Current.Count > detail.LoadPred.Future.Count {
+			ret[id] = detail
+			label := fmt.Sprintf("store-%d", id)
+			balanceHotRegionCounter.WithLabelValues("src-store", label).Inc()
+		}
 	}
 	return ret
 }
@@ -710,7 +730,16 @@ func (bs *balanceSolver) filterDstStores() map[uint64]*storeLoadDetail {
 	ret := make(map[uint64]*storeLoadDetail, len(candidates))
 	for _, store := range candidates {
 		if filter.Target(bs.cluster, store, filters) {
-			ret[store.GetID()] = bs.stLoadDetail[store.GetID()]
+			detail := bs.stLoadDetail[store.GetID()]
+			if detail.LoadPred.Current.ByteRate < detail.LoadPred.Future.ExpByteRate &&
+				detail.LoadPred.Current.KeyRate < detail.LoadPred.Future.ExpKeyRate &&
+				detail.LoadPred.Current.Count < detail.LoadPred.Future.Count {
+				ret[store.GetID()] = bs.stLoadDetail[store.GetID()]
+				label := fmt.Sprintf("store-%d", store.GetID())
+				balanceHotRegionCounter.WithLabelValues("dst-store", label).Inc()
+
+			}
+
 		}
 	}
 	return ret
