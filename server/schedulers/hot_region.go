@@ -280,10 +280,12 @@ func summaryStoresLoad(
 			{
 				ty := "byte-rate-" + rwTy.String() + "-" + kind.String()
 				hotPeerSummary.WithLabelValues(ty, fmt.Sprintf("%v", id)).Set(byteSum)
+				hotPeerSummary.WithLabelValues(ty+"real", fmt.Sprintf("%v", id)).Set(byteRate)
 			}
 			{
 				ty := "key-rate-" + rwTy.String() + "-" + kind.String()
 				hotPeerSummary.WithLabelValues(ty, fmt.Sprintf("%v", id)).Set(keySum)
+				hotPeerSummary.WithLabelValues(ty+"real", fmt.Sprintf("%v", id)).Set(keyRate)
 			}
 		}
 
@@ -721,6 +723,7 @@ func (bs *balanceSolver) calcProgressiveRank() {
 	dstLd := bs.stLoadDetail[bs.cur.dstStoreID].LoadPred.max()
 	peer := bs.cur.srcPeerStat
 	rank := int64(0)
+	nottransfer := true
 	if bs.rwTy == write && bs.opTy == transferLeader {
 		// In this condition, CPU usage is the matter.
 		// Only consider about count and key rate.
@@ -728,6 +731,7 @@ func (bs *balanceSolver) calcProgressiveRank() {
 			srcLd.KeyRate >= dstLd.KeyRate+peer.GetKeyRate() {
 			rank = -1
 		}
+		nottransfer = false
 	} else {
 		keyDecRatio := (dstLd.KeyRate + peer.GetKeyRate()) / (srcLd.KeyRate + 1)
 		keyHot := peer.GetKeyRate() >= bs.sche.conf.GetMinHotKeyRate()
@@ -747,6 +751,10 @@ func (bs *balanceSolver) calcProgressiveRank() {
 		}
 	}
 	bs.cur.progressiveRank = rank
+	if nottransfer {
+		direct := fmt.Sprintf("%d-%d", bs.cur.srcStoreID, bs.cur.dstStoreID)
+		hotPeerSummary.WithLabelValues("cal-rank", direct).Set(float64(rank))
+	}
 }
 
 // betterThan checks if `bs.cur` is a better solution than `old`.
