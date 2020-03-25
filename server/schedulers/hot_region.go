@@ -392,7 +392,7 @@ func (h *hotScheduler) balanceHotReadRegions(cluster opt.Cluster) []*operator.Op
 
 func (h *hotScheduler) balanceHotWriteRegions(cluster opt.Cluster) []*operator.Operator {
 	// prefer to balance by peer
-	seed := h.r.Intn(4)
+	seed := h.r.Intn(3)
 	switch {
 	case seed > 0:
 		peerSolver := newBalanceSolver(h, cluster, write, movePeer)
@@ -584,8 +584,8 @@ func (bs *balanceSolver) filterSrcStores() map[uint64]*storeLoadDetail {
 		}
 
 		label := fmt.Sprintf("store-%d", id)
-		if detail.LoadPred.Current.ByteRate > 1.05*detail.LoadPred.Future.ExpByteRate &&
-			detail.LoadPred.Current.KeyRate > 1.05*detail.LoadPred.Future.ExpKeyRate {
+		if detail.LoadPred.min().ByteRate > 1.02*detail.LoadPred.Future.ExpByteRate &&
+			detail.LoadPred.min().KeyRate > 1.02*detail.LoadPred.Future.ExpKeyRate {
 			ret[id] = detail
 			balanceHotRegionCounter.WithLabelValues("src-store", label).Inc()
 		}
@@ -751,12 +751,11 @@ func (bs *balanceSolver) filterDstStores() map[uint64]*storeLoadDetail {
 
 	ret := make(map[uint64]*storeLoadDetail, len(candidates))
 	for _, store := range candidates {
-
 		label := fmt.Sprintf("store-%d", store.GetID())
 		if filter.Target(bs.cluster, store, filters) {
 			detail := bs.stLoadDetail[store.GetID()]
-			if detail.LoadPred.Current.ByteRate < detail.LoadPred.Future.ExpByteRate &&
-				detail.LoadPred.Current.KeyRate < detail.LoadPred.Future.ExpKeyRate {
+			if detail.LoadPred.max().ByteRate < detail.LoadPred.Future.ExpByteRate &&
+				detail.LoadPred.max().KeyRate < detail.LoadPred.Future.ExpKeyRate {
 				ret[store.GetID()] = bs.stLoadDetail[store.GetID()]
 				balanceHotRegionCounter.WithLabelValues("dst-store", label).Inc()
 			}
