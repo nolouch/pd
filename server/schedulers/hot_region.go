@@ -262,7 +262,6 @@ func summaryStoresLoad(
 		keyRate := storeKeyRate[id]
 
 		// Find all hot peers first
-
 		hotPeers := make([]*statistics.HotPeerStat, 0)
 		{
 			byteSum := 0.0
@@ -393,16 +392,23 @@ func (h *hotScheduler) balanceHotReadRegions(cluster opt.Cluster) []*operator.Op
 
 func (h *hotScheduler) balanceHotWriteRegions(cluster opt.Cluster) []*operator.Operator {
 	// prefer to balance by peer
-	peerSolver := newBalanceSolver(h, cluster, write, movePeer)
-	ops := peerSolver.solve()
-	if len(ops) > 0 {
-		return ops
-	}
+	seed := h.r.Intn(4)
+	switch {
+	case seed > 0:
+		peerSolver := newBalanceSolver(h, cluster, write, movePeer)
+		ops := peerSolver.solve()
+		if len(ops) > 0 {
+			schedulerCounter.WithLabelValues(h.GetName(), "peer-write").Inc()
+			return ops
+		}
 
-	leaderSolver := newBalanceSolver(h, cluster, write, transferLeader)
-	ops = leaderSolver.solve()
-	if len(ops) > 0 {
-		return ops
+	case seed == 0:
+		leaderSolver := newBalanceSolver(h, cluster, write, transferLeader)
+		ops := leaderSolver.solve()
+		if len(ops) > 0 {
+			schedulerCounter.WithLabelValues(h.GetName(), "leader-write").Inc()
+			return ops
+		}
 	}
 
 	schedulerCounter.WithLabelValues(h.GetName(), "skip").Inc()
@@ -579,8 +585,7 @@ func (bs *balanceSolver) filterSrcStores() map[uint64]*storeLoadDetail {
 
 		label := fmt.Sprintf("store-%d", id)
 		if detail.LoadPred.Current.ByteRate > 1.05*detail.LoadPred.Future.ExpByteRate &&
-			detail.LoadPred.Current.KeyRate > 1.05*detail.LoadPred.Future.ExpKeyRate &&
-			detail.LoadPred.Current.Count > detail.LoadPred.Future.ExpCount {
+			detail.LoadPred.Current.KeyRate > 1.05*detail.LoadPred.Future.ExpKeyRate {
 			ret[id] = detail
 			balanceHotRegionCounter.WithLabelValues("src-store", label).Inc()
 		}
@@ -751,8 +756,7 @@ func (bs *balanceSolver) filterDstStores() map[uint64]*storeLoadDetail {
 		if filter.Target(bs.cluster, store, filters) {
 			detail := bs.stLoadDetail[store.GetID()]
 			if detail.LoadPred.Current.ByteRate < detail.LoadPred.Future.ExpByteRate &&
-				detail.LoadPred.Current.KeyRate < detail.LoadPred.Future.ExpKeyRate &&
-				detail.LoadPred.Current.Count < detail.LoadPred.Future.ExpCount {
+				detail.LoadPred.Current.KeyRate < detail.LoadPred.Future.ExpKeyRate {
 				ret[store.GetID()] = bs.stLoadDetail[store.GetID()]
 				balanceHotRegionCounter.WithLabelValues("dst-store", label).Inc()
 			}
