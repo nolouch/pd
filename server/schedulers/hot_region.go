@@ -1,5 +1,3 @@
-// Copyright 2017 PingCAP, Inc.
-//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -291,10 +289,11 @@ func summaryStoresLoad(
 				hotPeerSummary.WithLabelValues(ty, fmt.Sprintf("%v", id)).Set(keySum)
 				hotPeerSummary.WithLabelValues(ty+"real", fmt.Sprintf("%v", id)).Set(keyRate)
 			}
-			allByteSum += byteSum
-			allKeySum += keySum
-			allCount += float64(len(hotPeers))
+
 		}
+		allByteSum += byteRate
+		allKeySum += keyRate
+		allCount += float64(len(hotPeers))
 
 		// Build store load prediction from current load and pending influence.
 		stLoadPred := (&storeLoad{
@@ -311,10 +310,26 @@ func summaryStoresLoad(
 	}
 	storeLen := float64(len(storeByteRate))
 
-	for _, detail := range loadDetail {
-		detail.LoadPred.Future.ExpByteRate = allByteSum / storeLen
-		detail.LoadPred.Future.ExpKeyRate = allKeySum / storeLen
-		detail.LoadPred.Future.ExpCount = allCount / storeLen
+	for id, detail := range loadDetail {
+		byteExp := allByteSum / storeLen
+		keyExp := allKeySum / storeLen
+		countExp := allCount / storeLen
+		detail.LoadPred.Future.ExpByteRate = byteExp
+		detail.LoadPred.Future.ExpKeyRate = keyExp
+		detail.LoadPred.Future.ExpCount = countExp
+		// Debug
+		{
+			ty := "exp-byte-rate-" + rwTy.String() + "-" + kind.String()
+			hotPeerSummary.WithLabelValues(ty, fmt.Sprintf("%v", id)).Set(byteExp)
+		}
+		{
+			ty := "exp-key-rate-" + rwTy.String() + "-" + kind.String()
+			hotPeerSummary.WithLabelValues(ty, fmt.Sprintf("%v", id)).Set(keyExp)
+		}
+		{
+			ty := "exp-count-rate-" + rwTy.String() + "-" + kind.String()
+			hotPeerSummary.WithLabelValues(ty, fmt.Sprintf("%v", id)).Set(countExp)
+		}
 	}
 	return loadDetail
 }
@@ -561,13 +576,15 @@ func (bs *balanceSolver) filterSrcStores() map[uint64]*storeLoadDetail {
 		if len(detail.HotPeers) == 0 {
 			continue
 		}
+
+		label := fmt.Sprintf("store-%d", id)
 		if detail.LoadPred.Current.ByteRate > 1.1*detail.LoadPred.Future.ExpByteRate &&
 			detail.LoadPred.Current.KeyRate > 1.1*detail.LoadPred.Future.ExpKeyRate &&
 			detail.LoadPred.Current.Count > detail.LoadPred.Future.Count {
 			ret[id] = detail
-			label := fmt.Sprintf("store-%d", id)
 			balanceHotRegionCounter.WithLabelValues("src-store", label).Inc()
 		}
+		balanceHotRegionCounter.WithLabelValues("src-store-failed", label).Inc()
 	}
 	return ret
 }
@@ -729,17 +746,17 @@ func (bs *balanceSolver) filterDstStores() map[uint64]*storeLoadDetail {
 
 	ret := make(map[uint64]*storeLoadDetail, len(candidates))
 	for _, store := range candidates {
+
+		label := fmt.Sprintf("store-%d", store.GetID())
 		if filter.Target(bs.cluster, store, filters) {
 			detail := bs.stLoadDetail[store.GetID()]
 			if detail.LoadPred.Current.ByteRate < detail.LoadPred.Future.ExpByteRate &&
 				detail.LoadPred.Current.KeyRate < detail.LoadPred.Future.ExpKeyRate &&
 				detail.LoadPred.Current.Count < detail.LoadPred.Future.Count {
 				ret[store.GetID()] = bs.stLoadDetail[store.GetID()]
-				label := fmt.Sprintf("store-%d", store.GetID())
 				balanceHotRegionCounter.WithLabelValues("dst-store", label).Inc()
-
 			}
-
+			balanceHotRegionCounter.WithLabelValues("dst-store-failed", label).Inc()
 		}
 	}
 	return ret
