@@ -578,9 +578,9 @@ func (bs *balanceSolver) filterSrcStores() map[uint64]*storeLoadDetail {
 		}
 
 		label := fmt.Sprintf("store-%d", id)
-		if detail.LoadPred.Current.ByteRate > 1.1*detail.LoadPred.Future.ExpByteRate &&
-			detail.LoadPred.Current.KeyRate > 1.1*detail.LoadPred.Future.ExpKeyRate &&
-			detail.LoadPred.Current.Count > detail.LoadPred.Future.Count {
+		if detail.LoadPred.Current.ByteRate > 1.05*detail.LoadPred.Future.ExpByteRate &&
+			detail.LoadPred.Current.KeyRate > 1.05*detail.LoadPred.Future.ExpKeyRate &&
+			detail.LoadPred.Current.Count > detail.LoadPred.Future.ExpCount {
 			ret[id] = detail
 			balanceHotRegionCounter.WithLabelValues("src-store", label).Inc()
 		}
@@ -752,7 +752,7 @@ func (bs *balanceSolver) filterDstStores() map[uint64]*storeLoadDetail {
 			detail := bs.stLoadDetail[store.GetID()]
 			if detail.LoadPred.Current.ByteRate < detail.LoadPred.Future.ExpByteRate &&
 				detail.LoadPred.Current.KeyRate < detail.LoadPred.Future.ExpKeyRate &&
-				detail.LoadPred.Current.Count < detail.LoadPred.Future.Count {
+				detail.LoadPred.Current.Count < detail.LoadPred.Future.ExpCount {
 				ret[store.GetID()] = bs.stLoadDetail[store.GetID()]
 				balanceHotRegionCounter.WithLabelValues("dst-store", label).Inc()
 			}
