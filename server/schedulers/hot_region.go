@@ -137,7 +137,7 @@ func (h *hotScheduler) GetMinInterval() time.Duration {
 	return 500 * time.Millisecond
 }
 func (h *hotScheduler) GetNextInterval(interval time.Duration) time.Duration {
-	return intervalGrow(h.GetMinInterval(), time.Minute, exponentialGrowth)
+	return intervalGrow(h.GetMinInterval(), 3*statistics.StoreHeartBeatReportInterval*time.Second, exponentialGrowth)
 }
 
 func (h *hotScheduler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -287,13 +287,13 @@ func summaryStoresLoad(
 			// Metric for debug.
 			{
 				ty := "byte-rate-" + rwTy.String() + "-" + kind.String()
-				hotPeerSummary.WithLabelValues(ty, fmt.Sprintf("%v", id)).Set(byteSum)
-				hotPeerSummary.WithLabelValues(ty+"real", fmt.Sprintf("%v", id)).Set(byteRate)
+				hotPeerSummary.WithLabelValues("regions-"+ty, fmt.Sprintf("%v", id)).Set(byteSum)
+				hotPeerSummary.WithLabelValues("store-"+ty, fmt.Sprintf("%v", id)).Set(byteRate)
 			}
 			{
 				ty := "key-rate-" + rwTy.String() + "-" + kind.String()
-				hotPeerSummary.WithLabelValues(ty, fmt.Sprintf("%v", id)).Set(keySum)
-				hotPeerSummary.WithLabelValues(ty+"real", fmt.Sprintf("%v", id)).Set(keyRate)
+				hotPeerSummary.WithLabelValues("regions-"+ty, fmt.Sprintf("%v", id)).Set(keySum)
+				hotPeerSummary.WithLabelValues("store-"+ty, fmt.Sprintf("%v", id)).Set(keyRate)
 			}
 
 		}
@@ -782,9 +782,8 @@ func (bs *balanceSolver) calcProgressiveRank() {
 	nottransfer := true
 	if bs.rwTy == write && bs.opTy == transferLeader {
 		// In this condition, CPU usage is the matter.
-		// Only consider about count and key rate.
-		if srcLd.Count > dstLd.Count &&
-			srcLd.KeyRate >= dstLd.KeyRate+peer.GetKeyRate() {
+		// Only consider key rate.
+		if srcLd.KeyRate >= dstLd.KeyRate+peer.GetKeyRate() {
 			rank = -1
 		}
 		nottransfer = false
@@ -886,12 +885,10 @@ func (bs *balanceSolver) compareSrcStore(st1, st2 uint64) int {
 		if bs.rwTy == write && bs.opTy == transferLeader {
 			lpCmp = sliceLPCmp(
 				minLPCmp(negLoadCmp(sliceLoadCmp(
-					stLdRankCmp(stLdCount, stepRank(bs.maxSrc.Count, bs.rankStep.Count)),
 					stLdRankCmp(stLdKeyRate, stepRank(bs.maxSrc.KeyRate, bs.rankStep.KeyRate)),
 					stLdRankCmp(stLdByteRate, stepRank(bs.maxSrc.ByteRate, bs.rankStep.ByteRate)),
 				))),
 				diffCmp(sliceLoadCmp(
-					stLdRankCmp(stLdCount, stepRank(0, bs.rankStep.Count)),
 					stLdRankCmp(stLdKeyRate, stepRank(0, bs.rankStep.KeyRate)),
 					stLdRankCmp(stLdByteRate, stepRank(0, bs.rankStep.ByteRate)),
 				)),
