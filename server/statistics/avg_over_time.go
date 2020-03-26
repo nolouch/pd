@@ -106,7 +106,7 @@ func (t *TimeMedian) Get() float64 {
 // Add
 func (t *TimeMedian) Add(delta float64, interval time.Duration) {
 	t.aot.Add(delta, interval)
-	if t.aot.intervalSum > t.aotInterval {
+	if t.aot.intervalSum >= t.aotInterval {
 		t.mf.Add(t.aot.Get())
 	}
 }
@@ -114,7 +114,7 @@ func (t *TimeMedian) Add(delta float64, interval time.Duration) {
 // Set
 func (t *TimeMedian) Set(avg float64) {
 	t.aot.Set(avg)
-	if t.aot.intervalSum > t.aotInterval {
+	if t.aot.intervalSum >= t.aotInterval {
 		t.mf.Set(t.aot.Get())
 	}
 }
