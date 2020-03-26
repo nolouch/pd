@@ -134,7 +134,7 @@ func (h *hotScheduler) GetType() string {
 }
 
 func (h *hotScheduler) GetMinInterval() time.Duration {
-	return 500 * time.Minute
+	return 500 * time.Millisecond
 }
 func (h *hotScheduler) GetNextInterval(interval time.Duration) time.Duration {
 	return intervalGrow(h.GetMinInterval(), time.Minute, exponentialGrowth)
