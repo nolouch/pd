@@ -48,10 +48,15 @@ func NewAvgOverTime(interval time.Duration) *AvgOverTime {
 
 // Get returns change rate in the last interval.
 func (aot *AvgOverTime) Get() float64 {
-	if aot.intervalSum.Seconds() < 1 {
-		return 0
-	}
-	return aot.deltaSum / aot.intervalSum.Seconds()
+	result := aot.deltaSum / aot.intervalSum.Seconds()
+	aot.clear()
+	return result
+}
+
+func (aot *AvgOverTime) clear() {
+	aot.que = queue.New()
+	aot.intervalSum = 0
+	aot.deltaSum = 0
 }
 
 // Add adds recent change to AvgOverTime.
@@ -62,27 +67,54 @@ func (aot *AvgOverTime) Add(delta float64, interval time.Duration) {
 	aot.que.PushBack(deltaWithInterval{delta, interval})
 	aot.deltaSum += delta
 	aot.intervalSum += interval
-	if aot.intervalSum <= aot.avgInterval {
-		return
-	}
-	for aot.que.Len() > 0 {
-		front := aot.que.Front().(deltaWithInterval)
-		if aot.intervalSum-front.interval >= aot.avgInterval {
-			aot.que.PopFront()
-			aot.deltaSum -= front.delta
-			aot.intervalSum -= front.interval
-		} else {
-			break
-		}
-	}
 }
 
 // Set sets AvgOverTime to the given average.
 func (aot *AvgOverTime) Set(avg float64) {
 	for aot.que.Len() > 0 {
-		aot.que.PopFront()
+		aot.que = queue.New()
 	}
 	aot.deltaSum = avg * aot.avgInterval.Seconds()
 	aot.intervalSum = aot.avgInterval
 	aot.que.PushBack(deltaWithInterval{delta: aot.deltaSum, interval: aot.intervalSum})
+}
+
+// TimeMedian is AvgOverTime + MedianFilter
+// Size of MedianFilter should be larger than double size of AvgOverTime to denoisy.
+// Delay is aotSize * mfSize * StoreHeartBeatReportInterval /4
+type TimeMedian struct {
+	aotInterval time.Duration
+	aot         *AvgOverTime
+	mf          *MedianFilter
+}
+
+// NewTimeMedian returns a TimeMedian with given size.
+func NewTimeMedian(aotSize, mfSize int) *TimeMedian {
+	interval := time.Duration(aotSize*StoreHeartBeatReportInterval) * time.Second
+	return &TimeMedian{
+		aotInterval: interval,
+		aot:         NewAvgOverTime(interval),
+		mf:          NewMedianFilter(mfSize),
+	}
+}
+
+// Get
+func (t *TimeMedian) Get() float64 {
+	return t.mf.Get()
+}
+
+// Add
+func (t *TimeMedian) Add(delta float64, interval time.Duration) {
+	t.aot.Add(delta, interval)
+	if t.aot.intervalSum > t.aotInterval {
+		t.mf.Add(t.aot.Get())
+	}
+}
+
+// Set
+func (t *TimeMedian) Set(avg float64) {
+	t.aot.Set(avg)
+	if t.aot.intervalSum > t.aotInterval {
+		t.mf.Set(t.aot.Get())
+	}
 }
