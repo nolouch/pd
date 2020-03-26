@@ -86,3 +86,36 @@ func (aot *AvgOverTime) Set(avg float64) {
 	aot.intervalSum = aot.avgInterval
 	aot.que.PushBack(deltaWithInterval{delta: aot.deltaSum, interval: aot.intervalSum})
 }
+
+const size = 5
+
+// TimeMedian is AvgOverTime + MedianFilter
+type TimeMedian struct {
+	aot *AvgOverTime
+	mf  *MedianFilter
+}
+
+// NewTimeMedian returns an AvgOverTime with given interval.
+func NewTimeMedian(interval time.Duration) *TimeMedian {
+	return &TimeMedian{
+		aot: NewAvgOverTime(interval),
+		mf:  NewMedianFilter(size),
+	}
+}
+
+// Get
+func (t *TimeMedian) Get() float64 {
+	return t.mf.Get()
+}
+
+// Add
+func (t *TimeMedian) Add(delta float64, interval time.Duration) {
+	t.aot.Add(delta, interval)
+	t.mf.Add(t.aot.Get())
+}
+
+// Set
+func (t *TimeMedian) Set(avg float64) {
+	t.aot.Set(avg)
+	t.mf.Set(t.aot.Get())
+}

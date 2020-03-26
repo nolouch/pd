@@ -263,10 +263,10 @@ func (s *StoresStats) GetStoresKeysReadStat() map[uint64]float64 {
 // RollingStoreStats are multiple sets of recent historical records with specified windows size.
 type RollingStoreStats struct {
 	sync.RWMutex
-	bytesWriteRate          *AvgOverTime
-	bytesReadRate           *AvgOverTime
-	keysWriteRate           *AvgOverTime
-	keysReadRate            *AvgOverTime
+	bytesWriteRate          *TimeMedian
+	bytesReadRate           *TimeMedian
+	keysWriteRate           *TimeMedian
+	keysReadRate            *TimeMedian
 	totalCPUUsage           MovingAvg
 	totalBytesDiskReadRate  MovingAvg
 	totalBytesDiskWriteRate MovingAvg
@@ -278,10 +278,10 @@ const storeAvgInterval time.Duration = 3 * StoreHeartBeatReportInterval * time.S
 // NewRollingStoreStats creates a RollingStoreStats.
 func newRollingStoreStats() *RollingStoreStats {
 	return &RollingStoreStats{
-		bytesWriteRate:          NewAvgOverTime(storeAvgInterval),
-		bytesReadRate:           NewAvgOverTime(storeAvgInterval),
-		keysWriteRate:           NewAvgOverTime(storeAvgInterval),
-		keysReadRate:            NewAvgOverTime(storeAvgInterval),
+		bytesWriteRate:          NewTimeMedian(storeAvgInterval),
+		bytesReadRate:           NewTimeMedian(storeAvgInterval),
+		keysWriteRate:           NewTimeMedian(storeAvgInterval),
+		keysReadRate:            NewTimeMedian(storeAvgInterval),
 		totalCPUUsage:           NewMedianFilter(storeStatsRollingWindows),
 		totalBytesDiskReadRate:  NewMedianFilter(storeStatsRollingWindows),
 		totalBytesDiskWriteRate: NewMedianFilter(storeStatsRollingWindows),
