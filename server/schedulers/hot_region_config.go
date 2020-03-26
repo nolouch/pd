@@ -41,6 +41,7 @@ func initHotRegionScheduleConfig() *hotRegionSchedulerConfig {
 		CountRankStepRatio:    0.01,
 		GreatDecRatio:         0.95,
 		MinorDecRatio:         0.99,
+		ToleranceRatio:        1.1,
 		MaxPeerNum:            1000,
 	}
 }
@@ -61,6 +62,7 @@ type hotRegionSchedulerConfig struct {
 	CountRankStepRatio    float64 `json:"count-rank-step-ratio"`
 	GreatDecRatio         float64 `json:"great-dec-ratio"`
 	MinorDecRatio         float64 `json:"minor-dec-ratio"`
+	ToleranceRatio        float64 `json:"tolerance-ratio"`
 }
 
 func (conf *hotRegionSchedulerConfig) EncodeConfig() ([]byte, error) {
@@ -103,6 +105,12 @@ func (conf *hotRegionSchedulerConfig) GetGreatDecRatio() float64 {
 	conf.RLock()
 	defer conf.RUnlock()
 	return conf.GreatDecRatio
+}
+
+func (conf *hotRegionSchedulerConfig) GetToleranceRatio() float64 {
+	conf.RLock()
+	defer conf.RUnlock()
+	return conf.ToleranceRatio
 }
 
 func (conf *hotRegionSchedulerConfig) GetMinorGreatDecRatio() float64 {

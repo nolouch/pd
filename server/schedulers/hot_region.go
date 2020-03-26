@@ -133,6 +133,13 @@ func (h *hotScheduler) GetType() string {
 	return HotRegionType
 }
 
+func (h *hotScheduler) GetMinInterval() time.Duration {
+	return 500 * time.Minute
+}
+func (h *hotScheduler) GetNextInterval(interval time.Duration) time.Duration {
+	return intervalGrow(h.GetMinInterval(), time.Minute, exponentialGrowth)
+}
+
 func (h *hotScheduler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.conf.ServeHTTP(w, r)
 }
@@ -584,8 +591,8 @@ func (bs *balanceSolver) filterSrcStores() map[uint64]*storeLoadDetail {
 		}
 
 		label := fmt.Sprintf("store-%d", id)
-		if detail.LoadPred.min().ByteRate > 1.02*detail.LoadPred.Future.ExpByteRate &&
-			detail.LoadPred.min().KeyRate > 1.02*detail.LoadPred.Future.ExpKeyRate {
+		if detail.LoadPred.min().ByteRate > bs.sche.conf.GetToleranceRatio()*detail.LoadPred.Future.ExpByteRate &&
+			detail.LoadPred.min().KeyRate > bs.sche.conf.GetToleranceRatio()*detail.LoadPred.Future.ExpKeyRate {
 			ret[id] = detail
 			balanceHotRegionCounter.WithLabelValues("src-store", label).Inc()
 		}
@@ -754,8 +761,8 @@ func (bs *balanceSolver) filterDstStores() map[uint64]*storeLoadDetail {
 		label := fmt.Sprintf("store-%d", store.GetID())
 		if filter.Target(bs.cluster, store, filters) {
 			detail := bs.stLoadDetail[store.GetID()]
-			if detail.LoadPred.max().ByteRate < detail.LoadPred.Future.ExpByteRate &&
-				detail.LoadPred.max().KeyRate < detail.LoadPred.Future.ExpKeyRate {
+			if detail.LoadPred.max().ByteRate*bs.sche.conf.GetToleranceRatio() < detail.LoadPred.Future.ExpByteRate &&
+				detail.LoadPred.max().KeyRate*bs.sche.conf.GetToleranceRatio() < detail.LoadPred.Future.ExpKeyRate {
 				ret[store.GetID()] = bs.stLoadDetail[store.GetID()]
 				balanceHotRegionCounter.WithLabelValues("dst-store", label).Inc()
 			}
