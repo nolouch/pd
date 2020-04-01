@@ -279,9 +279,9 @@ const (
 func newRollingStoreStats() *RollingStoreStats {
 	return &RollingStoreStats{
 		bytesWriteRate:          NewTimeMedian(DefaultAotSize, DefaultMfSize),
-		bytesReadRate:           NewTimeMedian(DefaultAotSize, DefaultMfSize),
+		bytesReadRate:           NewTimeMedian(1, 3),
 		keysWriteRate:           NewTimeMedian(DefaultAotSize, DefaultMfSize),
-		keysReadRate:            NewTimeMedian(DefaultAotSize, DefaultMfSize),
+		keysReadRate:            NewTimeMedian(1, 3),
 		totalCPUUsage:           NewMedianFilter(storeStatsRollingWindows),
 		totalBytesDiskReadRate:  NewMedianFilter(storeStatsRollingWindows),
 		totalBytesDiskWriteRate: NewMedianFilter(storeStatsRollingWindows),
