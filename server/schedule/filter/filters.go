@@ -543,6 +543,34 @@ func (f *ruleFitFilter) Target(opt opt.Options, store *core.StoreInfo) bool {
 	return placement.CompareRegionFit(f.oldFit, newFit) <= 0
 }
 
+type tiflashFilter struct {
+	scope      string
+	constraint placement.LabelConstraint
+}
+
+func NewTiflashFilter(scope string) Filter {
+	return &tiflashFilter{
+		scope:      scope,
+		constraint: placement.LabelConstraint{Key: "engine", Op: "in", Values: []string{"tiflash"}},
+	}
+}
+
+func (f *tiflashFilter) Scope() string {
+	return f.scope
+}
+
+func (f *tiflashFilter) Type() string {
+	return "tiflash-use-filter"
+}
+
+func (f *tiflashFilter) Source(opt opt.Options, store *core.StoreInfo) bool {
+	return !f.constraint.MatchStore(store)
+}
+
+func (f *tiflashFilter) Target(opt opt.Options, store *core.StoreInfo) bool {
+	return !f.constraint.MatchStore(store)
+}
+
 type specialUseFilter struct {
 	scope      string
 	constraint placement.LabelConstraint
