@@ -99,6 +99,7 @@ type hotScheduler struct {
 	regionPendings map[uint64][2]*operator.Operator
 
 	// temporary states but exported to API or metrics
+	peerLevel   hotPeerLevel
 	stLoadInfos [resourceTypeLen]map[uint64]*storeLoadDetail
 	pendingSums [resourceTypeLen]map[uint64]Influence
 	// config of hot scheduler
@@ -172,13 +173,17 @@ func (h *hotScheduler) allowBalanceRegion(cluster opt.Cluster) bool {
 
 func (h *hotScheduler) Schedule(cluster opt.Cluster) []*operator.Operator {
 	schedulerCounter.WithLabelValues(h.GetName(), "schedule").Inc()
-	return h.dispatch(h.types[h.r.Int()%len(h.types)], cluster)
+	plan := func(peerLevel hotPeerLevel) []*operator.Operator {
+		return h.do(h.types[h.r.Int()%len(h.types)], peerLevel, cluster)
+	}
+	return priHighLevel(plan)
 }
 
-func (h *hotScheduler) dispatch(typ rwType, cluster opt.Cluster) []*operator.Operator {
+func (h *hotScheduler) do(typ rwType, peerLevel hotPeerLevel, cluster opt.Cluster) []*operator.Operator {
 	h.Lock()
 	defer h.Unlock()
 
+	h.peerLevel = peerLevel
 	h.prepareForBalance(cluster)
 
 	switch typ {
@@ -208,7 +213,7 @@ func (h *hotScheduler) prepareForBalance(cluster opt.Cluster) {
 			regionRead,
 			minHotDegree,
 			hotRegionThreshold,
-			read, core.LeaderKind, mixed)
+			read, core.LeaderKind, h.peerLevel)
 	}
 
 	{ // update write statistics
@@ -223,7 +228,7 @@ func (h *hotScheduler) prepareForBalance(cluster opt.Cluster) {
 			regionWrite,
 			minHotDegree,
 			hotRegionThreshold,
-			write, core.LeaderKind, mixed)
+			write, core.LeaderKind, h.peerLevel)
 
 		h.stLoadInfos[writePeer] = summaryStoresLoad(
 			storeByte,
@@ -232,7 +237,7 @@ func (h *hotScheduler) prepareForBalance(cluster opt.Cluster) {
 			regionWrite,
 			minHotDegree,
 			hotRegionThreshold,
-			write, core.RegionKind, mixed)
+			write, core.RegionKind, h.peerLevel)
 	}
 }
 
@@ -303,7 +308,7 @@ func summaryStoresLoad(
 	hotRegionThreshold [2]uint64,
 	rwTy rwType,
 	kind core.ResourceKind,
-	hotPeerFilterTy hotPeerFilterType,
+	peerLevel hotPeerLevel,
 ) map[uint64]*storeLoadDetail {
 	loadDetail := make(map[uint64]*storeLoadDetail, len(storeByteRate))
 	allByteSum := 0.0
@@ -319,7 +324,7 @@ func summaryStoresLoad(
 		{
 			byteSum := 0.0
 			keySum := 0.0
-			for _, peer := range filterHotPeers(kind, minHotDegree, hotRegionThreshold, storeHotPeers[id], hotPeerFilterTy) {
+			for _, peer := range filterHotPeers(kind, minHotDegree, hotRegionThreshold, storeHotPeers[id], peerLevel) {
 				byteSum += peer.GetByteRate()
 				keySum += peer.GetKeyRate()
 				hotPeers = append(hotPeers, peer.Clone())
@@ -388,13 +393,13 @@ func filterHotPeers(
 	minHotDegree int,
 	hotRegionThreshold [2]uint64,
 	peers []*statistics.HotPeerStat,
-	hotPeerFilterTy hotPeerFilterType,
+	peerLevel hotPeerLevel,
 ) []*statistics.HotPeerStat {
 	ret := make([]*statistics.HotPeerStat, 0)
 	for _, peer := range peers {
 		if (kind == core.LeaderKind && !peer.IsLeader()) ||
 			peer.HotDegree < minHotDegree ||
-			isHotPeerFiltered(peer, hotRegionThreshold, hotPeerFilterTy) {
+			isHotPeerFiltered(peer, hotRegionThreshold, peerLevel) {
 			continue
 		}
 		ret = append(ret, peer)
@@ -402,18 +407,18 @@ func filterHotPeers(
 	return ret
 }
 
-func isHotPeerFiltered(peer *statistics.HotPeerStat, hotRegionThreshold [2]uint64, hotPeerFilterTy hotPeerFilterType) bool {
+func isHotPeerFiltered(peer *statistics.HotPeerStat, hotRegionThreshold [2]uint64, peerLevel hotPeerLevel) bool {
 	var isFiltered bool
-	switch hotPeerFilterTy {
-	case high:
+	switch peerLevel {
+	case highLevel:
 		if peer.GetByteRate() < float64(hotRegionThreshold[0]) && peer.GetKeyRate() < float64(hotRegionThreshold[1]) {
 			isFiltered = true
 		}
-	case low:
+	case lowLevel:
 		if peer.GetByteRate() >= float64(hotRegionThreshold[0]) || peer.GetKeyRate() >= float64(hotRegionThreshold[1]) {
 			isFiltered = true
 		}
-	case mixed:
+	case uniformLevel:
 	}
 	return isFiltered
 }
@@ -1181,13 +1186,29 @@ func (rw rwType) String() string {
 	}
 }
 
-type hotPeerFilterType int
+type hotPeerLevel int
 
 const (
-	high hotPeerFilterType = iota
-	low
-	mixed
+	uniformLevel hotPeerLevel = iota
+	highLevel
+	lowLevel
 )
+
+type policy string
+
+const (
+	PriHighLevel = "pri-high-level-region"
+)
+
+var priHighLevel = func(doPlan func(peerType hotPeerLevel) []*operator.Operator) []*operator.Operator {
+	typ := highLevel
+	ops := doPlan(typ)
+	if len(ops) != 0 {
+		return ops
+	}
+	typ = lowLevel
+	return doPlan(typ)
+}
 
 type opType int
 
