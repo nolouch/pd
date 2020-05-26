@@ -100,7 +100,7 @@ func newEngineContext(filters ...filter.Filter) engineContext {
 
 // Scatter relocates the region.
 func (r *RegionScatterer) Scatter(region *core.RegionInfo) (*operator.Operator, error) {
-	if !opt.IsRegionReplicated(r.cluster, region) {
+	if !opt.IsRegionReplicatedLoose(r.cluster, region) {
 		return nil, errors.Errorf("region %d is not fully replicated", region.GetID())
 	}
 
