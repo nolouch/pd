@@ -152,11 +152,11 @@ func (oc *OperatorController) checkStaleOperator(op *operator.Operator, region *
 	// confver than the region that the operator holds. In this case,
 	// the operator is stale, and will not be executed even we would
 	// have sent it to TiKV servers. Here, we just cancel it.
+
 	origin := op.RegionEpoch()
 	latest := region.GetRegionEpoch()
 	changes := latest.GetConfVer() - origin.GetConfVer()
 	if changes > uint64(op.ConfVerChanged(region)) {
-
 		if oc.removeOperatorWithoutBury(op) {
 			if op.Cancel() {
 				log.Info("stale operator",
@@ -546,10 +546,12 @@ func (oc *OperatorController) buryOperator(op *operator.Operator) {
 			zap.Reflect("operator", op))
 		operatorCounter.WithLabelValues(op.Desc(), "expire").Inc()
 	case operator.TIMEOUT:
+		region := oc.cluster.GetRegion(op.RegionID())
 		log.Info("operator timeout",
 			zap.Uint64("region-id", op.RegionID()),
 			zap.Duration("takes", op.RunningTime()),
-			zap.Reflect("operator", op))
+			zap.Reflect("operator", op),
+			zap.Reflect("region", region.GetMeta()))
 		operatorCounter.WithLabelValues(op.Desc(), "timeout").Inc()
 	}
 
@@ -598,7 +600,10 @@ func (oc *OperatorController) SendScheduleCommand(region *core.RegionInfo, step 
 	log.Info("send schedule command",
 		zap.Uint64("region-id", region.GetID()),
 		zap.Stringer("step", step),
-		zap.String("source", source))
+		zap.String("source", source),
+		zap.Reflect("region", core.RegionToHexMeta(region.GetMeta())),
+	)
+
 	switch st := step.(type) {
 	case operator.TransferLeader:
 		cmd := &pdpb.RegionHeartbeatResponse{
