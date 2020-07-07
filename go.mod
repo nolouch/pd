@@ -50,3 +50,5 @@ require (
 	google.golang.org/grpc v1.25.1
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
+
+replace github.com/pingcap-incubator/tidb-dashboard v0.0.0-20200619091231-6843d6e0b7aa => github.com/hundundm/tidb-dashboard v0.0.0-20200707082626-f4a10d7b1fab
