@@ -124,6 +124,20 @@ func WithIncConfVer() RegionCreateOption {
 	}
 }
 
+// WithDecTerm increases the term of the region.
+func WithDecTerm() RegionCreateOption {
+	return func(region *RegionInfo) {
+		region.term--
+	}
+}
+
+// WithIncTerm increases the term of the region.
+func WithIncTerm() RegionCreateOption {
+	return func(region *RegionInfo) {
+		region.term++
+	}
+}
+
 // WithDecConfVer decreases the config version of the region.
 func WithDecConfVer() RegionCreateOption {
 	return func(region *RegionInfo) {

@@ -68,3 +68,8 @@ func (e StoreBlockedErr) Code() errcode.Code { return StoreBlockedCode }
 var ErrRegionIsStale = func(region *metapb.Region, origin *metapb.Region) error {
 	return errors.Errorf("region is stale: region %v origin %v", region, origin)
 }
+
+// ErrRegionIsStaleWithTerm is error info for region is stale.
+var ErrRegionIsStaleWithTerm = func(region *metapb.Region, origin *metapb.Region, rterm, oterm uint64) error {
+	return errors.Errorf("region is stale: region(term:%d) %v origin(term:%d) %v", rterm, region, oterm, origin)
+}

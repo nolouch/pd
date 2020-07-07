@@ -43,6 +43,7 @@ type RegionInfo struct {
 	readKeys          uint64
 	approximateSize   int64
 	approximateKeys   int64
+	term              uint64
 	interval          *pdpb.TimeInterval
 	replicationStatus *replication_modepb.RegionReplicationStatus
 }
@@ -102,6 +103,7 @@ func RegionFromHeartbeat(heartbeat *pdpb.RegionHeartbeatRequest) *RegionInfo {
 		approximateKeys:   int64(heartbeat.GetApproximateKeys()),
 		interval:          heartbeat.GetInterval(),
 		replicationStatus: heartbeat.GetReplicationStatus(),
+		term:              heartbeat.GetTerm(),
 	}
 
 	classifyVoterAndLearner(region)
@@ -130,6 +132,7 @@ func (r *RegionInfo) Clone(opts ...RegionCreateOption) *RegionInfo {
 		readKeys:          r.readKeys,
 		approximateSize:   r.approximateSize,
 		approximateKeys:   r.approximateKeys,
+		term:              r.term,
 		interval:          proto.Clone(r.interval).(*pdpb.TimeInterval),
 		replicationStatus: r.replicationStatus,
 	}
@@ -336,6 +339,11 @@ func (r *RegionInfo) GetApproximateSize() int64 {
 // GetApproximateKeys returns the approximate keys of the region.
 func (r *RegionInfo) GetApproximateKeys() int64 {
 	return r.approximateKeys
+}
+
+// GetTerm returns the term of the region.
+func (r *RegionInfo) GetTerm() uint64 {
+	return r.term
 }
 
 // GetInterval returns the interval information of the region.

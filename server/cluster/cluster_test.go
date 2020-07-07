@@ -141,6 +141,14 @@ func (s *testClusterInfoSuite) TestRegionHeartbeat(c *C) {
 		checkRegions(c, cluster.core.Regions, regions[:i+1])
 		checkRegionsKV(c, cluster.storage, regions[:i+1])
 
+		// region is stale (term).
+		stale = origin.Clone(core.WithIncVersion(), core.WithIncConfVer(), core.WithDecTerm())
+		err := cluster.processRegionHeartbeat(stale)
+		fmt.Println(err)
+		c.Assert(err, NotNil)
+		checkRegions(c, cluster.core.Regions, regions[:i+1])
+		checkRegionsKV(c, cluster.storage, regions[:i+1])
+
 		// Add a down peer.
 		region = region.Clone(core.WithDownPeers([]*pdpb.PeerStats{
 			{
@@ -707,7 +715,7 @@ func newTestRegions(n, np uint64) []*core.RegionInfo {
 			EndKey:      []byte{byte(i + 1)},
 			RegionEpoch: &metapb.RegionEpoch{ConfVer: 2, Version: 2},
 		}
-		regions = append(regions, core.NewRegionInfo(region, peers[0]))
+		regions = append(regions, core.NewRegionInfo(region, peers[0], core.WithIncTerm()))
 	}
 	return regions
 }

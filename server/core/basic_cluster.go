@@ -304,10 +304,15 @@ func (bc *BasicCluster) PreCheckPutRegion(region *RegionInfo) (*RegionInfo, erro
 	}
 	r := region.GetRegionEpoch()
 	o := origin.GetRegionEpoch()
+	// term check
+	if region.GetTerm() < origin.GetTerm() {
+		return origin, ErrRegionIsStaleWithTerm(region.GetMeta(), origin.GetMeta(), region.GetTerm(), origin.GetTerm())
+	}
 	// Region meta is stale, return an error.
 	if r.GetVersion() < o.GetVersion() || r.GetConfVer() < o.GetConfVer() {
 		return origin, ErrRegionIsStale(region.GetMeta(), origin.GetMeta())
 	}
+
 	return origin, nil
 }
 
