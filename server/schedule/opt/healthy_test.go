@@ -86,4 +86,8 @@ func (s *testRegionHealthySuite) TestIsRegionHealthy(c *C) {
 		c.Assert(IsHealthyAllowPending(tc, t.region), Equals, t.healthyAllowPending2)
 		c.Assert(IsRegionReplicated(tc, t.region), Equals, t.replicated2)
 	}
+
+	r1 := region(peers(1, 2, 3, 4), core.WithLearners(peers(1)))
+	opt.EnablePlacementRules = true
+	c.Assert(IsRegionReplicatedLoose(tc, r1), Equals, false)
 }

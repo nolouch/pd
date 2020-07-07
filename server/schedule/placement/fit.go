@@ -48,6 +48,7 @@ func (f *RegionFit) IsSatisfiedLoose() bool {
 	if len(f.RuleFits) == 0 {
 		return false
 	}
+
 	for _, r := range f.RuleFits {
 		// excluded learner.
 		if r.Rule.Role == Learner {
@@ -57,7 +58,8 @@ func (f *RegionFit) IsSatisfiedLoose() bool {
 			return false
 		}
 	}
-	return true
+
+	return len(f.OrphanPeers) == 0
 }
 
 // GetRuleFit returns the RuleFit that contains the peer.
