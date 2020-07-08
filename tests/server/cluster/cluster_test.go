@@ -638,7 +638,7 @@ func (s *clusterTestSuite) TestLoadClusterInfo(c *C) {
 	tc.WaitLeader()
 	leaderServer := tc.GetServer(tc.GetLeader())
 	svr := leaderServer.GetServer()
-	rc := cluster.NewRaftCluster(s.ctx, svr.GetClusterRootPath(), svr.ClusterID(), syncer.NewRegionSyncer(svr), svr.GetClient(), svr.GetHTTPClient())
+	rc := cluster.NewRaftCluster(s.ctx, svr.GetClusterRootPath(), svr.ClusterID(), syncer.NewRegionSyncer(svr), svr.GetClient(), svr.GetHTTPClient(), nil)
 
 	// Cluster is not bootstrapped.
 	rc.InitCluster(svr.GetAllocator(), svr.GetPersistOptions(), svr.GetStorage(), svr.GetBasicCluster())
@@ -679,7 +679,7 @@ func (s *clusterTestSuite) TestLoadClusterInfo(c *C) {
 	}
 	c.Assert(storage.Flush(), IsNil)
 
-	raftCluster = cluster.NewRaftCluster(s.ctx, svr.GetClusterRootPath(), svr.ClusterID(), syncer.NewRegionSyncer(svr), svr.GetClient(), svr.GetHTTPClient())
+	raftCluster = cluster.NewRaftCluster(s.ctx, svr.GetClusterRootPath(), svr.ClusterID(), syncer.NewRegionSyncer(svr), svr.GetClient(), svr.GetHTTPClient(), nil)
 	raftCluster.InitCluster(mockid.NewIDAllocator(), opt, storage, basicCluster)
 	raftCluster, err = raftCluster.LoadClusterInfo()
 	c.Assert(err, IsNil)
