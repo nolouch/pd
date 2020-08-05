@@ -566,8 +566,7 @@ func (h *regionsHandler) GetTopSize(w http.ResponseWriter, r *http.Request) {
 // @Router /regions/check [get]
 func (h *regionsHandler) CheckRegion(w http.ResponseWriter, r *http.Request) {
 	rc := getCluster(r.Context())
-	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
 	if err != nil {
 		h.rd.JSON(w, http.StatusBadRequest, err.Error())
 		return
@@ -577,13 +576,13 @@ func (h *regionsHandler) CheckRegion(w http.ResponseWriter, r *http.Request) {
 		h.rd.JSON(w, http.StatusNotFound, server.ErrRegionNotFound(uint64(id)).Error())
 		return
 	}
-	pass := false
 	if opt.IsRegionReplicated(rc, region) {
-		pass = true
+		h.rd.JSON(w, http.StatusOK, true)
+		return
 	} else {
 		rc.AddSuspectRegions(region.GetID())
 	}
-	h.rd.JSON(w, http.StatusOK, pass)
+	h.rd.JSON(w, http.StatusOK, false)
 }
 
 func (h *regionsHandler) GetTopNRegions(w http.ResponseWriter, r *http.Request, less func(a, b *core.RegionInfo) bool) {
