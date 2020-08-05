@@ -52,5 +52,3 @@ require (
 )
 
 replace github.com/pingcap-incubator/tidb-dashboard v0.0.0-20200619091231-6843d6e0b7aa => github.com/hundundm/tidb-dashboard v0.0.0-20200707082626-f4a10d7b1fab
-
-replace github.com/pingcap/kvproto => github.com/Yisaer/kvproto v0.0.0-20200805070240-3370ce1b1abe

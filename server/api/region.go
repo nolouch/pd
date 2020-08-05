@@ -24,8 +24,10 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/kvproto/pkg/pdpb"
 	"github.com/pingcap/kvproto/pkg/replication_modepb"
+	"github.com/pingcap/pd/v4/pkg/apiutil"
 	"github.com/pingcap/pd/v4/server"
 	"github.com/pingcap/pd/v4/server/core"
+	"github.com/pingcap/pd/v4/server/schedule/opt"
 	"github.com/unrolled/render"
 )
 
@@ -555,6 +557,34 @@ func (h *regionsHandler) GetTopSize(w http.ResponseWriter, r *http.Request) {
 	h.GetTopNRegions(w, r, func(a, b *core.RegionInfo) bool {
 		return a.GetApproximateSize() < b.GetApproximateSize()
 	})
+}
+
+// @Tags region
+// @Summary Check regions
+// @Produce json
+// @Success 200 {object} string
+// @Failure 400 {string} string "The input is invalid."
+// @Router /regions/check [post]
+func (h *regionsHandler) CheckRegions(w http.ResponseWriter, r *http.Request) {
+	rc := getCluster(r.Context())
+	var input = struct {
+		RegionIDList []uint64 `json:"ids"`
+	}{}
+	if err := apiutil.ReadJSONRespondError(h.rd, w, r.Body, &input); err != nil {
+		return
+	}
+	regionCheckStatus := make(map[uint64]bool, len(input.RegionIDList))
+	for _, regionID := range input.RegionIDList {
+		region := rc.GetRegion(regionID)
+		if region != nil {
+			if opt.IsRegionReplicated(rc, region) {
+				regionCheckStatus[regionID] = true
+			} else {
+				rc.AddSuspectRegions(regionID)
+			}
+		}
+	}
+	h.rd.JSON(w, http.StatusOK, regionCheckStatus)
 }
 
 func (h *regionsHandler) GetTopNRegions(w http.ResponseWriter, r *http.Request, less func(a, b *core.RegionInfo) bool) {
