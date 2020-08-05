@@ -15,6 +15,7 @@ package api
 
 import (
 	"container/heap"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -573,6 +574,10 @@ func (h *regionsHandler) CheckRegions(w http.ResponseWriter, r *http.Request) {
 	if err := apiutil.ReadJSONRespondError(h.rd, w, r.Body, &input); err != nil {
 		return
 	}
+	for _, regionID := range input.RegionIDList {
+		fmt.Println(regionID)
+	}
+
 	regionCheckStatus := make(map[uint64]bool, len(input.RegionIDList))
 	for _, regionID := range input.RegionIDList {
 		region := rc.GetRegion(regionID)
