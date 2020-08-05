@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/pd/v4/server/cluster"
 	"github.com/pingcap/pd/v4/server/core"
+	"github.com/pingcap/pd/v4/server/schedule/opt"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -503,7 +504,6 @@ func (s *Server) ScanRegions(ctx context.Context, request *pdpb.ScanRegionsReque
 			leader = &metapb.Peer{}
 		}
 		resp.Regions = append(resp.Regions, r.GetMeta())
-		resp.Leaders = append(resp.Leaders, leader)
 	}
 	return resp, nil
 }
@@ -837,6 +837,36 @@ func (s *Server) GetOperator(ctx context.Context, request *pdpb.GetOperatorReque
 		Desc:     []byte(r.Op.Desc()),
 		Kind:     []byte(r.Op.Kind().String()),
 		Status:   r.Status,
+	}, nil
+}
+
+func (s *Server) CheckRegion(ctx context.Context, request *pdpb.CheckRegionRequest) (*pdpb.CheckRegionResponse, error) {
+	if err := s.validateRequest(request.GetHeader()); err != nil {
+		return nil, err
+	}
+	rc := s.GetRaftCluster()
+	if rc == nil {
+		return &pdpb.CheckRegionResponse{Header: s.notBootstrappedHeader()}, nil
+	}
+	region := rc.GetRegion(request.RegionId)
+	if region == nil {
+		header := s.errorHeader(&pdpb.Error{
+			Type:    pdpb.ErrorType_REGION_NOT_FOUND,
+			Message: "Not Found",
+		})
+		return &pdpb.CheckRegionResponse{Header: header}, nil
+	}
+
+	if !opt.IsRegionReplicated(rc, region) {
+		rc.AddSuspectRegions(region.GetID())
+		return &pdpb.CheckRegionResponse{
+			Header: s.header(),
+			Pass:   false,
+		}, nil
+	}
+	return &pdpb.CheckRegionResponse{
+		Header: s.header(),
+		Pass:   true,
 	}, nil
 }
 
