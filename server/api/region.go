@@ -563,7 +563,7 @@ func (h *regionsHandler) GetTopSize(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {object} bool
 // @Failure 400 {string} string "The input is invalid."
-// @Router /regions/check [post]
+// @Router /regions/check [get]
 func (h *regionsHandler) CheckRegion(w http.ResponseWriter, r *http.Request) {
 	rc := getCluster(r.Context())
 	vars := mux.Vars(r)
