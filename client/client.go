@@ -87,6 +87,8 @@ type Client interface {
 	GetOperator(ctx context.Context, regionID uint64) (*pdpb.GetOperatorResponse, error)
 	// Close closes the client.
 	Close()
+	// CheckRegion
+	CheckRegion(ctx context.Context, regionID uint64) (*pdpb.CheckRegionResponse, error)
 }
 
 // GetStoreOp represents available options when getting stores.
@@ -693,6 +695,22 @@ func (c *client) GetOperator(ctx context.Context, regionID uint64) (*pdpb.GetOpe
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	return c.leaderClient().GetOperator(ctx, &pdpb.GetOperatorRequest{
+		Header:   c.requestHeader(),
+		RegionId: regionID,
+	})
+}
+
+func (c *client) CheckRegion(ctx context.Context, regionID uint64) (*pdpb.CheckRegionResponse, error) {
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span = opentracing.StartSpan("pdclient.CheckRegion", opentracing.ChildOf(span.Context()))
+		defer span.Finish()
+	}
+	start := time.Now()
+	defer func() { cmdDurationGetOperator.Observe(time.Since(start).Seconds()) }()
+
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	return c.leaderClient().CheckRegion(ctx, &pdpb.CheckRegionRequest{
 		Header:   c.requestHeader(),
 		RegionId: regionID,
 	})
