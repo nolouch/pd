@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/kvproto/pkg/pdpb"
 	"github.com/pingcap/kvproto/pkg/replication_modepb"
-	"github.com/pingcap/pd/v4/pkg/apiutil"
 	"github.com/pingcap/pd/v4/server"
 	"github.com/pingcap/pd/v4/server/core"
 	"github.com/pingcap/pd/v4/server/schedule/opt"
@@ -560,32 +559,31 @@ func (h *regionsHandler) GetTopSize(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Tags region
-// @Summary Check regions
+// @Summary Check region
 // @Produce json
-// @Success 200 {object} string
+// @Success 200 {object} bool
 // @Failure 400 {string} string "The input is invalid."
 // @Router /regions/check [post]
-func (h *regionsHandler) CheckRegions(w http.ResponseWriter, r *http.Request) {
+func (h *regionsHandler) CheckRegion(w http.ResponseWriter, r *http.Request) {
 	rc := getCluster(r.Context())
-	var input = struct {
-		RegionIDList []uint64 `json:"ids"`
-	}{}
-	if err := apiutil.ReadJSONRespondError(h.rd, w, r.Body, &input); err != nil {
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		h.rd.JSON(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	regionCheckStatus := make(map[uint64]bool, len(input.RegionIDList))
-	for _, regionID := range input.RegionIDList {
-		region := rc.GetRegion(regionID)
-		if region != nil {
-			if opt.IsRegionReplicated(rc, region) {
-				regionCheckStatus[regionID] = true
-			} else {
-				rc.AddSuspectRegions(regionID)
-			}
-		}
+	region := rc.GetRegion(uint64(id))
+	if region == nil {
+		h.rd.JSON(w, http.StatusNotFound, server.ErrRegionNotFound(uint64(id)).Error())
+		return
 	}
-	h.rd.JSON(w, http.StatusOK, regionCheckStatus)
+	pass := false
+	if opt.IsRegionReplicated(rc, region) {
+		pass = true
+	} else {
+		rc.AddSuspectRegions(region.GetID())
+	}
+	h.rd.JSON(w, http.StatusOK, pass)
 }
 
 func (h *regionsHandler) GetTopNRegions(w http.ResponseWriter, r *http.Request, less func(a, b *core.RegionInfo) bool) {
