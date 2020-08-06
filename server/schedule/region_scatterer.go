@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
+	"github.com/pingcap/pd/v4/pkg/codec"
 	"github.com/pingcap/pd/v4/server/core"
 	"github.com/pingcap/pd/v4/server/schedule/filter"
 	"github.com/pingcap/pd/v4/server/schedule/operator"
@@ -31,25 +32,32 @@ import (
 const regionScatterName = "region-scatter"
 
 type selectedLeaderStores struct {
-	mu     sync.Mutex
-	stores map[uint64]uint64
+	mu sync.Mutex
+	//stores             map[uint64]uint64
+	leaderDistribution map[int64]map[uint64]uint64
 }
 
-func (s *selectedLeaderStores) put(id uint64) {
+func (s *selectedLeaderStores) put(tableID int64, storeID uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.stores[id] = s.stores[id] + 1
+	if _, ok := s.leaderDistribution[tableID]; !ok {
+		s.leaderDistribution[tableID] = map[uint64]uint64{}
+	}
+	s.leaderDistribution[tableID][storeID] = s.leaderDistribution[tableID][storeID] + 1
 }
 
-func (s *selectedLeaderStores) get(id uint64) uint64 {
+func (s *selectedLeaderStores) get(tableID int64, storeID uint64) uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.stores[id]
+	if _, ok := s.leaderDistribution[tableID]; !ok {
+		s.leaderDistribution[tableID] = map[uint64]uint64{}
+	}
+	return s.leaderDistribution[tableID][storeID]
 }
 
 func newSelectedLeaderStores() *selectedLeaderStores {
 	return &selectedLeaderStores{
-		stores: make(map[uint64]uint64),
+		leaderDistribution: map[int64]map[uint64]uint64{},
 	}
 }
 
@@ -188,7 +196,7 @@ func (r *RegionScatterer) scatterRegion(region *core.RegionInfo) *operator.Opera
 		scatterWithSameEngine(peers, context)
 	}
 
-	targetLeader := r.collectAvailableLeaderStores(targetPeers, r.ordinaryEngine)
+	targetLeader := r.collectAvailableLeaderStores(region, targetPeers, r.ordinaryEngine)
 	op, err := operator.CreateScatterRegionOperator("scatter-region", r.cluster, region, targetPeers, targetLeader)
 	if err != nil {
 		log.Debug("fail to create scatter region operator", zap.Error(err))
@@ -249,18 +257,19 @@ func (r *RegionScatterer) collectAvailableStores(region *core.RegionInfo, contex
 	return targets
 }
 
-func (r *RegionScatterer) collectAvailableLeaderStores(peers map[uint64]*metapb.Peer, context engineContext) uint64 {
+func (r *RegionScatterer) collectAvailableLeaderStores(region *core.RegionInfo, peers map[uint64]*metapb.Peer, context engineContext) uint64 {
 	m := uint64(math.MaxUint64)
 	id := uint64(0)
+	tableID := codec.Key(region.GetStartKey()).TableID()
 	for storeID := range peers {
-		count := context.selectedLeader.get(storeID)
+		count := context.selectedLeader.get(tableID, storeID)
 		if m > count {
 			m = count
 			id = storeID
 		}
 	}
 	if id != 0 {
-		context.selectedLeader.put(id)
+		context.selectedLeader.put(tableID, id)
 	}
 	return id
 }
