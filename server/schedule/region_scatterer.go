@@ -15,7 +15,6 @@ package schedule
 
 import (
 	"math"
-	"math/rand"
 	"sync"
 
 	"github.com/pingcap/kvproto/pkg/metapb"
@@ -32,8 +31,7 @@ import (
 const regionScatterName = "region-scatter"
 
 type selectedLeaderStores struct {
-	mu sync.Mutex
-	//stores             map[uint64]uint64
+	mu                 sync.Mutex
 	leaderDistribution map[int64]map[uint64]uint64
 }
 
@@ -62,24 +60,39 @@ func newSelectedLeaderStores() *selectedLeaderStores {
 }
 
 type selectedStores struct {
-	mu     sync.Mutex
-	stores map[uint64]struct{}
+	mu               sync.Mutex
+	stores           map[uint64]struct{}
+	peerDistribution map[int64]map[uint64]uint64
 }
 
 func newSelectedStores() *selectedStores {
 	return &selectedStores{
-		stores: make(map[uint64]struct{}),
+		stores:           make(map[uint64]struct{}),
+		peerDistribution: map[int64]map[uint64]uint64{},
 	}
 }
 
-func (s *selectedStores) put(id uint64) bool {
+func (s *selectedStores) put(tableID int64, storeID uint64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.stores[id]; ok {
+	if _, ok := s.stores[storeID]; ok {
 		return false
 	}
-	s.stores[id] = struct{}{}
+	if _, ok := s.peerDistribution[tableID]; !ok {
+		s.peerDistribution[tableID] = map[uint64]uint64{}
+	}
+	s.stores[storeID] = struct{}{}
+	s.peerDistribution[tableID][storeID] = s.peerDistribution[tableID][storeID] + 1
 	return true
+}
+
+func (s *selectedStores) get(tableID int64, storeID uint64) uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.peerDistribution[tableID]; !ok {
+		s.peerDistribution[tableID] = map[uint64]uint64{}
+	}
+	return s.peerDistribution[tableID][storeID]
 }
 
 func (s *selectedStores) reset() {
@@ -161,7 +174,7 @@ func (r *RegionScatterer) scatterRegion(region *core.RegionInfo) *operator.Opera
 	}
 
 	targetPeers := make(map[uint64]*metapb.Peer)
-
+	tableID := codec.Key(region.GetStartKey()).TableID()
 	scatterWithSameEngine := func(peers []*metapb.Peer, context engineContext) {
 		stores := r.collectAvailableStores(region, context)
 		for _, peer := range peers {
@@ -169,19 +182,19 @@ func (r *RegionScatterer) scatterRegion(region *core.RegionInfo) *operator.Opera
 				context.selected.reset()
 				stores = r.collectAvailableStores(region, context)
 			}
-			if context.selected.put(peer.GetStoreId()) {
+			if context.selected.put(tableID, peer.GetStoreId()) {
 				delete(stores, peer.GetStoreId())
 				targetPeers[peer.GetStoreId()] = peer
 				continue
 			}
-			newPeer := r.selectPeerToReplace(stores, region, peer)
+			newPeer := r.selectPeerToReplace(stores, region, peer, context)
 			if newPeer == nil {
 				targetPeers[peer.GetStoreId()] = peer
 				continue
 			}
 			// Remove it from stores and mark it as selected.
 			delete(stores, newPeer.GetStoreId())
-			context.selected.put(newPeer.GetStoreId())
+			context.selected.put(tableID, newPeer.GetStoreId())
 			targetPeers[newPeer.GetStoreId()] = newPeer
 		}
 	}
@@ -206,7 +219,7 @@ func (r *RegionScatterer) scatterRegion(region *core.RegionInfo) *operator.Opera
 	return op
 }
 
-func (r *RegionScatterer) selectPeerToReplace(stores map[uint64]*core.StoreInfo, region *core.RegionInfo, oldPeer *metapb.Peer) *metapb.Peer {
+func (r *RegionScatterer) selectPeerToReplace(stores map[uint64]*core.StoreInfo, region *core.RegionInfo, oldPeer *metapb.Peer, context engineContext) *metapb.Peer {
 	// scoreGuard guarantees that the distinct score will not decrease.
 	regionStores := r.cluster.GetRegionStores(region)
 	storeID := oldPeer.GetStoreId()
@@ -233,9 +246,13 @@ func (r *RegionScatterer) selectPeerToReplace(stores map[uint64]*core.StoreInfo,
 		return nil
 	}
 
-	target := candidates[rand.Intn(len(candidates))]
+	tableID := codec.Key(region.GetStartKey()).TableID()
+	targetStoreID := r.selectLeastTablePeerCountStore(tableID, candidates, context)
+	if targetStoreID == 0 {
+		return nil
+	}
 	return &metapb.Peer{
-		StoreId:   target.GetID(),
+		StoreId:   targetStoreID,
 		IsLearner: oldPeer.GetIsLearner(),
 	}
 }
@@ -270,6 +287,19 @@ func (r *RegionScatterer) collectAvailableLeaderStores(region *core.RegionInfo, 
 	}
 	if id != 0 {
 		context.selectedLeader.put(tableID, id)
+	}
+	return id
+}
+
+func (r *RegionScatterer) selectLeastTablePeerCountStore(tableID int64, stores []*core.StoreInfo, context engineContext) uint64 {
+	m := uint64(math.MaxUint64)
+	id := uint64(0)
+	for _, store := range stores {
+		count := context.selected.get(tableID, store.GetID())
+		if m > count {
+			m = count
+			id = store.GetID()
+		}
 	}
 	return id
 }
