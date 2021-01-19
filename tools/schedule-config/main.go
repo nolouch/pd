@@ -14,25 +14,28 @@
 package main
 
 import (
-	"bufio"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
-	"math"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"path"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/tikv/pd/pkg/etcdutil"
+	"github.com/pingcap/pd/v4/server/config"
+	"github.com/pingcap/pd/v4/server/core"
+	"github.com/pingcap/pd/v4/server/kv"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/pkg/transport"
 )
 
 var (
 	clusterID = flag.Uint64("cluster-id", 0, "please make cluster ID match with TiKV")
+	storeID   = flag.Uint64("store-id", 0, "the store id need to delete store limit")
 	endpoints = flag.String("endpoints", "http://127.0.0.1:2379", "endpoints urls")
 	filePath  = flag.String("file", "stores.dump", "dump file path and name")
 	caPath    = flag.String("cacert", "", "path of file that contains list of trusted SSL CAs")
@@ -60,13 +63,16 @@ func checkErr(err error) {
 
 func main() {
 	flag.Parse()
-
 	rootPath = path.Join(pdRootPath, strconv.FormatUint(*clusterID, 10))
 	f, err := os.Create(*filePath)
 	checkErr(err)
 	defer f.Close()
 
 	urls := strings.Split(*endpoints, ",")
+	if len(urls) == 0 {
+		fmt.Println("invalid url")
+		os.Exit(1)
+	}
 
 	tlsInfo := transport.TLSInfo{
 		CertFile:      *certPath,
@@ -82,53 +88,53 @@ func main() {
 		TLS:         tlsConfig,
 	})
 	checkErr(err)
-
-	err = loadStores(client, f)
+	if err := validStoreID(urls[0]); err != nil {
+		checkErr(err)
+	}
+	err = ResetStoreLimit(client)
 	checkErr(err)
 	fmt.Println("successful!")
 }
 
-func loadStores(client *clientv3.Client, f *os.File) error {
-	nextID := uint64(0)
-	endKey := path.Join(clusterPath, "s", fmt.Sprintf("%020d", uint64(math.MaxUint64)))
-	w := bufio.NewWriter(f)
-	defer w.Flush()
-	for {
-		key := path.Join(clusterPath, "s", fmt.Sprintf("%020d", nextID))
-		_, res, err := loadRange(client, key, endKey, minKVRangeLimit)
-		if err != nil {
-			return err
-		}
-		for _, str := range res {
-			store := &metapb.Store{}
-			if err := store.Unmarshal([]byte(str)); err != nil {
-				return errors.WithStack(err)
+func validStoreID(url string) error {
+	urlStore := fmt.Sprintf("%s/pd/api/v1/store/%d", url, *storeID)
+	resp, err := http.Get(urlStore)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	storeInfo := make(map[string]interface{})
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(fmt.Sprintf("http get url %s return code %d", url, resp.StatusCode))
+	}
+	json.Unmarshal(b, &storeInfo)
+	//fmt.Printf("%+v", storeInfo)
+	if store, ok := storeInfo["store"]; ok {
+		if id, iok := store.(map[string]interface{})["id"]; iok {
+			sid := id.(float64)
+			if uint64(sid) == *storeID {
+				return errors.New("the store already exist, cannot remove store id.")
 			}
-
-			nextID = store.GetId() + 1
-			fmt.Fprintln(w, store)
-		}
-		if len(res) < minKVRangeLimit {
-			return nil
 		}
 	}
+	return nil
 }
 
-func loadRange(client *clientv3.Client, key, endKey string, limit int) ([]string, []string, error) {
-	key = path.Join(rootPath, key)
-	endKey = path.Join(rootPath, endKey)
-
-	withRange := clientv3.WithRange(endKey)
-	withLimit := clientv3.WithLimit(int64(limit))
-	resp, err := etcdutil.EtcdKVGet(client, key, withRange, withLimit)
-	if err != nil {
-		return nil, nil, err
+func ResetStoreLimit(client *clientv3.Client) error {
+	c := &config.Config{}
+	opt := config.NewPersistOptions(c)
+	rootPath := path.Join(pdRootPath, strconv.FormatUint(*clusterID, 10))
+	kvBase := kv.NewEtcdKVBase(client, rootPath)
+	storage := core.NewStorage(kvBase)
+	if err := opt.Reload(storage); err != nil {
+		return err
 	}
-	keys := make([]string, 0, len(resp.Kvs))
-	values := make([]string, 0, len(resp.Kvs))
-	for _, item := range resp.Kvs {
-		keys = append(keys, strings.TrimPrefix(strings.TrimPrefix(string(item.Key), rootPath), "/"))
-		values = append(values, string(item.Value))
-	}
-	return keys, values, nil
+	cfg := opt.GetScheduleConfig().Clone()
+	delete(cfg.StoreLimit, *storeID)
+	opt.SetScheduleConfig(cfg)
+	return opt.Persist(storage)
 }
