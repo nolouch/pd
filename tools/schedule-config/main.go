@@ -37,7 +37,6 @@ var (
 	clusterID = flag.Uint64("cluster-id", 0, "please make cluster ID match with TiKV")
 	storeID   = flag.Uint64("store-id", 0, "the store id need to delete store limit")
 	endpoints = flag.String("endpoints", "http://127.0.0.1:2379", "endpoints urls")
-	filePath  = flag.String("file", "stores.dump", "dump file path and name")
 	caPath    = flag.String("cacert", "", "path of file that contains list of trusted SSL CAs")
 	certPath  = flag.String("cert", "", "path of file that contains X509 certificate in PEM format")
 	keyPath   = flag.String("key", "", "path of file that contains X509 key in PEM format")
@@ -64,9 +63,6 @@ func checkErr(err error) {
 func main() {
 	flag.Parse()
 	rootPath = path.Join(pdRootPath, strconv.FormatUint(*clusterID, 10))
-	f, err := os.Create(*filePath)
-	checkErr(err)
-	defer f.Close()
 
 	urls := strings.Split(*endpoints, ",")
 	if len(urls) == 0 {
