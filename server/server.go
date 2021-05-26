@@ -1256,6 +1256,12 @@ func (s *Server) campaignLeader() {
 		return
 	}
 	s.member.EnableLeader()
+	defer func() {
+		//s.member.ResetLeader()
+		// as soon as cancel the keepalive.
+		//	cance""l()
+		log.Warn("stop server step 1")
+	}()
 
 	CheckPDVersion(s.persistOptions)
 	log.Info("PD cluster leader is ready to serve", zap.String("pd-leader-name", s.Name()))

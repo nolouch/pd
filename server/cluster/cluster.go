@@ -334,8 +334,11 @@ func (c *RaftCluster) runCoordinator() {
 		c.coordinator.wg.Wait()
 		log.Info("coordinator has been stopped")
 	}()
-	c.coordinator.run()
+
 	<-c.coordinator.ctx.Done()
+	failpoint.Inject("coordinatorIsBusy", func() {
+		time.Sleep(100 * time.Millisecond)
+	})
 	log.Info("coordinator is stopping")
 }
 
