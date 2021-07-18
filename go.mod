@@ -55,4 +55,4 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
 
-replace go.etcd.io/etcd v0.5.0-alpha.5.0.20191023171146-3cf2f69b5738 => github.com/nolouch/etcd v0.5.0-alpha.5.0.20210718174603-8b8f060ae3b7
+replace go.etcd.io/etcd v0.5.0-alpha.5.0.20191023171146-3cf2f69b5738 => github.com/nolouch/etcd v0.5.0-alpha.5.0.20210718180250-d49ca414558e
