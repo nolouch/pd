@@ -16,8 +16,8 @@ package schedule
 import (
 	"time"
 
-	"github.com/juju/ratelimit"
 	"github.com/pingcap/pd/server/schedule/operator"
+	"golang.org/x/time/rate"
 )
 
 // StoreLimitMode indicates the strategy to set store limit
@@ -45,36 +45,37 @@ func (m StoreLimitMode) String() string {
 
 // StoreLimit limits the operators of a store
 type StoreLimit struct {
-	bucket *ratelimit.Bucket
-	mode   StoreLimitMode
+	rate *rate.Limiter
+	mode StoreLimitMode
 }
 
 // NewStoreLimit returns a StoreLimit object
-func NewStoreLimit(rate float64, mode StoreLimitMode) *StoreLimit {
+func NewStoreLimit(ratePer float64, mode StoreLimitMode) *StoreLimit {
 	capacity := operator.RegionInfluence
-	if rate > 1 {
-		capacity = int64(rate * float64(operator.RegionInfluence))
+	if ratePer > 1 {
+		capacity = int64(ratePer * float64(operator.RegionInfluence))
 	}
-	rate *= float64(operator.RegionInfluence)
+	ratePer *= float64(operator.RegionInfluence)
 	return &StoreLimit{
-		bucket: ratelimit.NewBucketWithRate(rate, capacity),
-		mode:   mode,
+		rate: rate.NewLimiter(rate.Limit(ratePer), int(capacity)),
+		mode: mode,
 	}
 }
 
 // Available returns the number of available tokens
 func (l *StoreLimit) Available() int64 {
-	return l.bucket.Available()
+	// return l.rate.AllowN(time.Now(), 0)
+	return 0
 }
 
 // Rate returns the fill rate of the bucket, in tokens per second.
 func (l *StoreLimit) Rate() float64 {
-	return l.bucket.Rate()
+	return float64(l.rate.Limit())
 }
 
 // Take takes count tokens from the bucket without blocking.
 func (l *StoreLimit) Take(count int64) time.Duration {
-	return l.bucket.Take(count)
+	return l.rate.ReserveN(time.Now(), int(count)).Delay()
 }
 
 // Mode returns the store limit mode
