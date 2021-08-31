@@ -19,7 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/juju/ratelimit"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/kvproto/pkg/pdpb"
 	"github.com/pingcap/log"
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/pd/v4/server/core"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -74,7 +74,7 @@ type RegionSyncer struct {
 	closed             chan struct{}
 	wg                 sync.WaitGroup
 	history            *historyBuffer
-	limit              *ratelimit.Bucket
+	limit              *rate.Limiter
 	securityConfig     *grpcutil.SecurityConfig
 }
 
@@ -89,7 +89,7 @@ func NewRegionSyncer(s Server) *RegionSyncer {
 		server:         s,
 		closed:         make(chan struct{}),
 		history:        newHistoryBuffer(defaultHistoryBufferSize, s.GetStorage().GetRegionStorage()),
-		limit:          ratelimit.NewBucketWithRate(defaultBucketRate, defaultBucketCapacity),
+		limit:          rate.NewLimiter(defaultBucketRate, defaultBucketCapacity),
 		securityConfig: s.GetSecurityConfig(),
 	}
 }
@@ -191,7 +191,7 @@ func (s *RegionSyncer) syncHistoryRegion(request *pdpb.SyncRegionRequest, stream
 					StartIndex:  uint64(lastIndex),
 					RegionStats: stats,
 				}
-				s.limit.Wait(int64(resp.Size()))
+				s.limit.WaitN(context.Background(), int(resp.Size()))
 				lastIndex += len(metas)
 				if err := stream.Send(resp); err != nil {
 					log.Error("failed to send sync region response", zap.Error(err))

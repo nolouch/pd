@@ -18,7 +18,6 @@ import (
 	"container/list"
 	"context"
 	"fmt"
-	"strconv"
 	"sync"
 	"time"
 
@@ -447,7 +446,7 @@ func (oc *OperatorController) addOperatorLocked(op *operator.Operator) bool {
 		if oc.storesLimit[storeID] == nil {
 			continue
 		}
-		for n, v := range storelimit.TypeNameValue {
+		for _, v := range storelimit.TypeNameValue {
 			if oc.storesLimit[storeID][v] == nil {
 				continue
 			}
@@ -455,8 +454,6 @@ func (oc *OperatorController) addOperatorLocked(op *operator.Operator) bool {
 			if stepCost == 0 {
 				continue
 			}
-			storeLimitGauge.WithLabelValues(strconv.FormatUint(storeID, 10), "take", n).Set(float64(stepCost) / float64(storelimit.RegionInfluence[v]))
-			oc.storesLimit[storeID][v].Take(stepCost)
 		}
 	}
 	oc.updateCounts(oc.operators)
@@ -864,17 +861,12 @@ func (o *OperatorRecords) Put(op *operator.Operator) {
 func (oc *OperatorController) exceedStoreLimit(ops ...*operator.Operator) bool {
 	opInfluence := NewTotalOpInfluence(ops, oc.cluster)
 	for storeID := range opInfluence.StoresInfluence {
-		for n, v := range storelimit.TypeNameValue {
+		for _, v := range storelimit.TypeNameValue {
 			stepCost := opInfluence.GetStoreInfluence(storeID).GetStepCost(v)
 			if stepCost == 0 {
 				continue
 			}
-
-			available := oc.getOrCreateStoreLimit(storeID, v).Available()
-			storeLimitGauge.WithLabelValues(strconv.FormatUint(storeID, 10), "available", n).Set(float64(available) / float64(storelimit.RegionInfluence[v]))
-			if available < stepCost {
-				return true
-			}
+			return !oc.getOrCreateStoreLimit(storeID, v).Available(stepCost)
 		}
 	}
 	return false
@@ -932,10 +924,7 @@ func (oc *OperatorController) getOrCreateStoreLimit(storeID uint64, limitType st
 		oc.cluster.AttachAvailableFunc(storeID, limitType, func() bool {
 			oc.RLock()
 			defer oc.RUnlock()
-			if oc.storesLimit[storeID][limitType] == nil {
-				return true
-			}
-			return oc.storesLimit[storeID][limitType].Available() >= storelimit.RegionInfluence[limitType]
+			return oc.storesLimit[storeID][limitType].IsAvailable(storelimit.RegionInfluence[limitType])
 		})
 	}
 	return oc.storesLimit[storeID][limitType]

@@ -29,7 +29,6 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.14.3 // indirect
 	github.com/json-iterator/go v1.1.9 // indirect
-	github.com/juju/ratelimit v1.0.1
 	github.com/kevinburke/go-bindata v3.18.0+incompatible
 	github.com/leodido/go-urn v1.2.0 // indirect
 	github.com/mailru/easyjson v0.7.1 // indirect
@@ -61,6 +60,7 @@ require (
 	go.uber.org/goleak v0.10.0
 	go.uber.org/zap v1.13.0
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e // indirect
+	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	golang.org/x/tools v0.0.0-20200325010219-a49f79bcc224
 	google.golang.org/grpc v1.25.1
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
