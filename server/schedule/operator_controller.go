@@ -460,7 +460,6 @@ func (oc *OperatorController) addOperatorLocked(op *operator.Operator) bool {
 			if stepCost == 0 {
 				continue
 			}
-			storeLimit.Take(stepCost)
 			storeLimitCostCounter.WithLabelValues(strconv.FormatUint(storeID, 10), n).Add(float64(stepCost) / float64(storelimit.RegionInfluence[v]))
 		}
 	}
@@ -886,9 +885,7 @@ func (oc *OperatorController) exceedStoreLimit(ops ...*operator.Operator) bool {
 			if stepCost == 0 {
 				continue
 			}
-			if oc.getOrCreateStoreLimit(storeID, v).Available() < stepCost {
-				return true
-			}
+			return !oc.getOrCreateStoreLimit(storeID, v).Available(stepCost)
 		}
 	}
 	return false
@@ -911,10 +908,7 @@ func (oc *OperatorController) getOrCreateStoreLimit(storeID uint64, limitType st
 		oc.cluster.AttachAvailableFunc(storeID, limitType, func() bool {
 			oc.RLock()
 			defer oc.RUnlock()
-			if oc.storesLimit[storeID][limitType] == nil {
-				return true
-			}
-			return oc.storesLimit[storeID][limitType].Available() >= storelimit.RegionInfluence[limitType]
+			return oc.storesLimit[storeID][limitType].IsAvailable(storelimit.RegionInfluence[limitType])
 		})
 	}
 	ratePerSec := oc.cluster.GetStoreLimitByType(storeID, limitType) / StoreBalanceBaseTime
@@ -952,7 +946,6 @@ func (oc *OperatorController) CollectStoreLimitMetrics() {
 					continue
 				}
 				storeLimit = oc.storesLimit[storeID][v]
-				storeLimitAvailableGauge.WithLabelValues(storeIDStr, n).Set(float64(storeLimit.Available()) / float64(storelimit.RegionInfluence[v]))
 				storeLimitRateGauge.WithLabelValues(storeIDStr, n).Set(storeLimit.Rate() * StoreBalanceBaseTime)
 			}
 		}
