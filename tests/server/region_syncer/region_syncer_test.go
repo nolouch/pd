@@ -135,18 +135,22 @@ func (s *regionSyncerTestSuite) TestRegionSyncer(c *C) {
 	// ensure flush to region storage, we use a duration larger than the
 	// region storage flush rate limit (3s).
 	time.Sleep(4 * time.Second)
-
 	// test All regions have been synchronized to the cache of followerServer
 	followerServer := cluster.GetServer(cluster.GetFollower())
 	c.Assert(followerServer, NotNil)
 	cacheRegions := followerServer.GetServer().GetBasicCluster().GetRegions()
 	c.Assert(cacheRegions, HasLen, regionLen)
-	for _, region := range cacheRegions {
-		r := leaderServer.GetServer().GetBasicCluster().GetRegion(region.GetID())
-		c.Assert(r.GetMeta(), DeepEquals, region.GetMeta())
-		c.Assert(r.GetStat(), DeepEquals, region.GetStat())
-		c.Assert(r.GetLeader(), DeepEquals, region.GetLeader())
-	}
+	testutil.WaitUntil(c, func(c *C) bool {
+		for _, region := range cacheRegions {
+			r := leaderServer.GetServer().GetBasicCluster().GetRegion(region.GetID())
+			if !(c.Check(r.GetMeta(), DeepEquals, region.GetMeta()) &&
+				c.Check(r.GetStat(), DeepEquals, region.GetStat()) &&
+				c.Check(r.GetLeader(), DeepEquals, region.GetLeader())) {
+				return false
+			}
+		}
+		return true
+	})
 
 	err = leaderServer.Stop()
 	c.Assert(err, IsNil)
