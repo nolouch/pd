@@ -159,10 +159,13 @@ func (s *RegionSyncer) Sync(ctx context.Context, stream pdpb.PD_SyncRegionsServe
 	for {
 		select {
 		case <-ctx.Done():
+			failpoint.Inject("noFastExitSync", func() {
+				failpoint.Goto("doSync")
+			})
 			return nil
 		default:
 		}
-
+		failpoint.Label("doSync")
 		request, err := stream.Recv()
 		if err == io.EOF {
 			return nil
@@ -208,7 +211,7 @@ func (s *RegionSyncer) syncHistoryRegion(ctx context.Context, request *pdpb.Sync
 				select {
 				case <-ctx.Done():
 					log.Info("discontinue sending sync region response")
-					failpoint.Inject("noFastExitSync", func() {
+					failpoint.Inject("noFastExitFullSync", func() {
 						failpoint.Goto("doSync")
 					})
 					return nil
