@@ -400,6 +400,7 @@ BenchmarkRegionTreeUpdateUnordered-8     2446611               557.1 ns/op
 */
 func BenchmarkRegionTreeUpdate(b *testing.B) {
 	tree := newRegionTree()
+	//	fmt.Println(b.N)
 	for i := 0; i < b.N; i++ {
 		item := &RegionInfo{meta: &metapb.Region{StartKey: []byte(fmt.Sprintf("%20d", i)), EndKey: []byte(fmt.Sprintf("%20d", i+1))}}
 		updateNewItem(tree, item)
@@ -426,6 +427,25 @@ func BenchmarkRegionTreeUpdateUnordered(b *testing.B) {
 	}
 
 	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		updateNewItem(tree, items[i])
+	}
+}
+
+func BenchmarkRegionTreeInsertUpdateUnordered(b *testing.B) {
+	tree := newRegionTree()
+	var items []*RegionInfo
+	for i := 0; i < MaxKey; i++ {
+		updateNewItem(tree, &RegionInfo{meta: &metapb.Region{StartKey: []byte(fmt.Sprintf("%20d", i)), EndKey: []byte(fmt.Sprintf("%20d", i+1))}})
+		var startKey, endKey int
+		key1 := rand.Intn(MaxKey)
+		startKey = key1
+		endKey = key1 + 1
+		items = append(items, &RegionInfo{meta: &metapb.Region{StartKey: []byte(fmt.Sprintf("%20d", startKey)), EndKey: []byte(fmt.Sprintf("%20d", endKey)), RegionEpoch: &metapb.RegionEpoch{Version: uint64(1), ConfVer: uint64(1)}}})
+	}
+	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		updateNewItem(tree, items[i])
 	}

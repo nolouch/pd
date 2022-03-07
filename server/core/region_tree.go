@@ -33,9 +33,18 @@ type regionItem struct {
 
 // byRegionItem is a comparison function that compares regionItems and returns true
 // when a is less than b.
-func byRegionItem(a, b interface{}) bool {
-	i1, i2 := a.(*regionItem), b.(*regionItem)
-	return i1.Less(i2)
+func byRegionItem(a, b *regionItem) bool {
+	//i1, i2 := a.(*regionItem), b.(*regionItem)
+	return a.Less(b)
+}
+
+// testKind is the item type.
+// It's important to use the equal symbol, which tells Go to create an alias of
+// the type, rather than creating an entirely new type.
+type testKind = int
+
+func testLess(a, b testKind) bool {
+	return a < b
 }
 
 // Less returns true if the region start key is less than the other.
@@ -55,7 +64,7 @@ const (
 )
 
 type regionTree struct {
-	tree *btree.BTree
+	tree *btree.Generic[*regionItem]
 	// Statistics
 	totalSize           int64
 	totalWriteBytesRate float64
@@ -64,7 +73,7 @@ type regionTree struct {
 
 func newRegionTree() *regionTree {
 	return &regionTree{
-		tree:                btree.New(byRegionItem),
+		tree:                btree.NewGenericOptions(byRegionItem, btree.Options{NoLocks: true}),
 		totalSize:           0,
 		totalWriteBytesRate: 0,
 		totalWriteKeysRate:  0,
@@ -103,8 +112,8 @@ func (t *regionTree) getOverlaps(region *RegionInfo) []*RegionInfo {
 	// 	overlaps = append(overlaps, over.region)
 	// 	return true
 	// })
-	t.tree.Ascend(result, func(i interface{}) bool {
-		over := i.(*regionItem)
+	t.tree.Ascend(result, func(i *regionItem) bool {
+		over := i
 		if len(region.GetEndKey()) > 0 && bytes.Compare(region.GetEndKey(), over.region.GetStartKey()) <= 0 {
 			return false
 		}
@@ -205,8 +214,8 @@ func (t *regionTree) find(region *RegionInfo) *regionItem {
 	item := &regionItem{region: region}
 
 	var result *regionItem
-	t.tree.Descend(item, func(i interface{}) bool {
-		result = i.(*regionItem)
+	t.tree.Descend(item, func(i *regionItem) bool {
+		result = i
 		return false
 	})
 
@@ -226,8 +235,8 @@ func (t *regionTree) scanRange(startKey []byte, f func(*RegionInfo) bool) {
 	if startItem == nil {
 		startItem = &regionItem{region: &RegionInfo{meta: &metapb.Region{StartKey: startKey}}}
 	}
-	t.tree.Ascend(startItem, func(item interface{}) bool {
-		return f(item.(*regionItem).region)
+	t.tree.Ascend(startItem, func(item *regionItem) bool {
+		return f(item.region)
 	})
 }
 
@@ -246,18 +255,18 @@ func (t *regionTree) scanRanges() []*RegionInfo {
 func (t *regionTree) getAdjacentRegions(region *RegionInfo) (*regionItem, *regionItem) {
 	item := &regionItem{region: &RegionInfo{meta: &metapb.Region{StartKey: region.GetStartKey()}}}
 	var prev, next *regionItem
-	t.tree.Ascend(item, func(i interface{}) bool {
-		if bytes.Equal(item.region.GetStartKey(), i.(*regionItem).region.GetStartKey()) {
+	t.tree.Ascend(item, func(i *regionItem) bool {
+		if bytes.Equal(item.region.GetStartKey(), i.region.GetStartKey()) {
 			return true
 		}
-		next = i.(*regionItem)
+		next = i
 		return false
 	})
-	t.tree.Descend(item, func(i interface{}) bool {
-		if bytes.Equal(item.region.GetStartKey(), i.(*regionItem).region.GetStartKey()) {
+	t.tree.Descend(item, func(i *regionItem) bool {
+		if bytes.Equal(item.region.GetStartKey(), i.region.GetStartKey()) {
 			return true
 		}
-		prev = i.(*regionItem)
+		prev = i
 		return false
 	})
 	return prev, next
@@ -289,8 +298,8 @@ func (t *regionTree) RandomRegion(ranges []KeyRange) *RegionInfo {
 
 		var curRegion *regionItem
 		item := &regionItem{region: &RegionInfo{meta: &metapb.Region{StartKey: startKey}}}
-		t.tree.Ascend(item, func(i interface{}) bool {
-			curRegion = i.(*regionItem)
+		t.tree.Ascend(item, func(i *regionItem) bool {
+			curRegion = i
 			return false
 		})
 
@@ -298,7 +307,7 @@ func (t *regionTree) RandomRegion(ranges []KeyRange) *RegionInfo {
 			curRegion = t.find(&RegionInfo{meta: &metapb.Region{StartKey: endKey}})
 		}
 		if curRegion == nil {
-			curRegion = t.tree.GetAt(0).(*regionItem)
+			curRegion, _ = t.tree.GetAt(0)
 		}
 		region := curRegion.region
 
