@@ -437,12 +437,12 @@ func BenchmarkRegionTreeInsertUpdateUnordered(b *testing.B) {
 	tree := newRegionTree()
 	var items []*RegionInfo
 	for i := 0; i < MaxKey; i++ {
-		updateNewItem(tree, &RegionInfo{meta: &metapb.Region{StartKey: []byte(fmt.Sprintf("%20d", i)), EndKey: []byte(fmt.Sprintf("%20d", i+1))}})
+		updateNewItem(tree, &RegionInfo{meta: &metapb.Region{Id: uint64(i), StartKey: []byte(fmt.Sprintf("%20d", i)), EndKey: []byte(fmt.Sprintf("%20d", i+1))}})
 		var startKey, endKey int
 		key1 := rand.Intn(MaxKey)
 		startKey = key1
 		endKey = key1 + 1
-		items = append(items, &RegionInfo{meta: &metapb.Region{StartKey: []byte(fmt.Sprintf("%20d", startKey)), EndKey: []byte(fmt.Sprintf("%20d", endKey)), RegionEpoch: &metapb.RegionEpoch{Version: uint64(1), ConfVer: uint64(1)}}})
+		items = append(items, &RegionInfo{meta: &metapb.Region{Id: uint64(startKey), StartKey: []byte(fmt.Sprintf("%20d", startKey)), EndKey: []byte(fmt.Sprintf("%20d", endKey)), RegionEpoch: &metapb.RegionEpoch{Version: uint64(1), ConfVer: uint64(1)}}})
 	}
 	b.ResetTimer()
 
