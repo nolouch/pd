@@ -1325,7 +1325,8 @@ type DashboardConfig struct {
 	EnableTelemetry    bool   `toml:"enable-telemetry" json:"enable-telemetry"`
 	EnableExperimental bool   `toml:"enable-experimental" json:"enable-experimental"`
 	// WARN: DisableTelemetry is deprecated.
-	DisableTelemetry bool `toml:"disable-telemetry" json:"disable-telemetry,omitempty"`
+	DisableTelemetry           bool              `toml:"disable-telemetry" json:"disable-telemetry,omitempty"`
+	KeyVisualDataFetchInterval typeutil.Duration `toml:"keyvisual-data-fetch-interval" json:"keyvisual-data-fetch-interval"`
 }
 
 // ToTiDBTLSConfig generates tls config for connecting to TiDB, used by tidb-dashboard.
@@ -1350,6 +1351,9 @@ func (c *DashboardConfig) adjust(meta *configMetaData) {
 		c.EnableTelemetry = defaultEnableTelemetry
 	}
 	c.EnableTelemetry = c.EnableTelemetry && !c.DisableTelemetry
+	if !meta.IsDefined("keyvisual-data-fetch-interval") {
+		c.KeyVisualDataFetchInterval = typeutil.NewDuration(time.Minute)
+	}
 }
 
 // ReplicationModeConfig is the configuration for the replication policy.

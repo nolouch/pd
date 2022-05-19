@@ -56,3 +56,5 @@ require (
 	google.golang.org/grpc v1.26.0
 	gotest.tools/gotestsum v1.7.0
 )
+
+replace github.com/pingcap/tidb-dashboard => github.com/nolouch/tidb-dashboard v0.0.0-20220519095522-e84492c2591e
