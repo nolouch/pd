@@ -133,17 +133,8 @@ func (manager *Manager) saveNewKeyspace(keyspace *keyspacepb.KeyspaceMeta) (*key
 	if keyspaceExists {
 		return nil, ErrKeyspaceExists
 	}
-	// TODO: Enable Transaction at storage layer to save MetaData and NameToID in a single transaction.
-	// Save keyspace keyspace before saving id.
-	if err = manager.store.SaveKeyspace(keyspace); err != nil {
-		return nil, err
-	}
-	// Create name to ID entry,
-	// if this failed, previously stored keyspace meta should be removed.
-	if err = manager.createNameToID(keyspace.Id, keyspace.Name); err != nil {
-		if removeErr := manager.store.RemoveKeyspace(keyspace.Id); removeErr != nil {
-			return nil, errors.Wrap(removeErr, "failed to remove keyspace keyspace after save spaceID failure")
-		}
+
+	if err = manager.store.SaveNewKeyspace(keyspace); err != nil {
 		return nil, err
 	}
 
@@ -305,10 +296,4 @@ func (manager *Manager) allocID() (uint32, error) {
 		return 0, err
 	}
 	return id32, nil
-}
-
-// createNameToID create a keyspace name to ID lookup entry.
-// It returns error if saving keyspace name meet error.
-func (manager *Manager) createNameToID(spaceID uint32, name string) error {
-	return manager.store.SaveKeyspaceIDByName(spaceID, name)
 }
