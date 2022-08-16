@@ -15,13 +15,16 @@
 package keyspace
 
 import (
+	"context"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/keyspacepb"
+	"github.com/tikv/pd/pkg/errs"
 	"github.com/tikv/pd/pkg/syncutil"
 	"github.com/tikv/pd/server/id"
 	"github.com/tikv/pd/server/storage/endpoint"
+	"github.com/tikv/pd/server/storage/kv"
 )
 
 const (
@@ -47,6 +50,8 @@ type Manager struct {
 	idAllocator id.Allocator
 	// store is the storage for keyspace related information.
 	store endpoint.KeyspaceStorage
+	// ctx is the context of the manager, to be used in transaction.
+	ctx context.Context
 }
 
 // CreateKeyspaceRequest represents necessary arguments to create a keyspace.
@@ -64,14 +69,7 @@ func NewKeyspaceManager(store endpoint.KeyspaceStorage, idAllocator id.Allocator
 		store:       store,
 		idAllocator: idAllocator,
 		metaLock:    syncutil.NewLockGroup(syncutil.WithHash(SpaceIDHash)),
-	}
-	// If default keyspace already exists, skip initialization.
-	defaultExist, _, err := manager.store.LoadKeyspaceIDByName(DefaultKeyspaceName)
-	if err != nil {
-		return nil, err
-	}
-	if defaultExist {
-		return manager, nil
+		ctx:         context.TODO(),
 	}
 	// Initialize default keyspace.
 	now := time.Now()
@@ -82,8 +80,8 @@ func NewKeyspaceManager(store endpoint.KeyspaceStorage, idAllocator id.Allocator
 		CreatedAt:      now.Unix(),
 		StateChangedAt: now.Unix(),
 	}
-	_, err = manager.saveNewKeyspace(defaultKeyspace)
-	if err != nil && err != ErrKeyspaceExists {
+	err := manager.saveNewKeyspace(defaultKeyspace)
+	if err != nil && err != ErrKeyspaceExists && !errors.ErrorEqual(errs.ErrEtcdTxnConflict, err) {
 		return nil, err
 	}
 	return manager, nil
@@ -109,63 +107,71 @@ func (manager *Manager) CreateKeyspace(request *CreateKeyspaceRequest) (*keyspac
 		StateChangedAt: request.Now.Unix(),
 		Config:         request.Config,
 	}
-	return manager.saveNewKeyspace(keyspace)
+	err = manager.saveNewKeyspace(keyspace)
+	if err != nil {
+		return nil, err
+	}
+	return keyspace, nil
 }
 
-func (manager *Manager) saveNewKeyspace(keyspace *keyspacepb.KeyspaceMeta) (*keyspacepb.KeyspaceMeta, error) {
+func (manager *Manager) saveNewKeyspace(keyspace *keyspacepb.KeyspaceMeta) error {
 	manager.idLock.Lock()
 	defer manager.idLock.Unlock()
-	// Check if keyspace id with that name already exists.
-	nameExists, _, err := manager.store.LoadKeyspaceIDByName(keyspace.Name)
-	if err != nil {
-		return nil, err
-	}
-	if nameExists {
-		return nil, ErrKeyspaceExists
-	}
 	manager.metaLock.Lock(keyspace.Id)
 	defer manager.metaLock.Unlock(keyspace.Id)
-	// Check if keyspace meta with that id already exists.
-	keyspaceExists, err := manager.store.LoadKeyspace(keyspace.Id, &keyspacepb.KeyspaceMeta{})
-	if err != nil {
-		return nil, err
-	}
-	if keyspaceExists {
-		return nil, ErrKeyspaceExists
-	}
 
-	if err = manager.store.SaveNewKeyspace(keyspace); err != nil {
-		return nil, err
-	}
-
-	return keyspace, nil
+	return manager.store.RunInTxn(manager.ctx, func(txn kv.Txn) error {
+		// Save keyspace ID.
+		// Check if keyspace with that name already exists.
+		nameExists, _, err := manager.store.LoadKeyspaceID(txn, keyspace.Name)
+		if err != nil {
+			return err
+		}
+		if nameExists {
+			return ErrKeyspaceExists
+		}
+		err = manager.store.SaveKeyspaceID(txn, keyspace.Id, keyspace.Name)
+		if err != nil {
+			return err
+		}
+		// Save keyspace meta.
+		// Check if keyspace with that id already exists.
+		loadedMeta, err := manager.store.LoadKeyspaceMeta(txn, keyspace.Id)
+		if err != nil {
+			return err
+		}
+		if loadedMeta != nil {
+			return ErrKeyspaceExists
+		}
+		return manager.store.SaveKeyspaceMeta(txn, keyspace)
+	})
 }
 
 // LoadKeyspace returns the keyspace specified by name.
 // It returns error if loading or unmarshalling met error or if keyspace does not exist.
 func (manager *Manager) LoadKeyspace(name string) (*keyspacepb.KeyspaceMeta, error) {
-	// First get keyspace ID from the name given.
-	loaded, spaceID, err := manager.store.LoadKeyspaceIDByName(name)
+	var meta *keyspacepb.KeyspaceMeta
+	err := manager.store.RunInTxn(manager.ctx, func(txn kv.Txn) error {
+		loaded, spaceID, err := manager.store.LoadKeyspaceID(txn, name)
+		if err != nil {
+			return err
+		}
+		if !loaded {
+			return ErrKeyspaceNotFound
+		}
+		meta, err = manager.store.LoadKeyspaceMeta(txn, spaceID)
+		if err != nil {
+			return err
+		}
+		if meta == nil {
+			return ErrKeyspaceNotFound
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if !loaded {
-		return nil, ErrKeyspaceNotFound
-	}
-	return manager.loadKeyspaceByID(spaceID)
-}
-
-func (manager *Manager) loadKeyspaceByID(spaceID uint32) (*keyspacepb.KeyspaceMeta, error) {
-	// Load the keyspace with target ID.
-	keyspace := &keyspacepb.KeyspaceMeta{}
-	loaded, err := manager.store.LoadKeyspace(spaceID, keyspace)
-	if err != nil {
-		return nil, err
-	}
-	if !loaded {
-		return nil, ErrKeyspaceNotFound
-	}
-	return keyspace, nil
+	return meta, nil
 }
 
 // Mutation represents a single operation to be applied on keyspace config.
@@ -192,44 +198,53 @@ const (
 // UpdateKeyspaceConfig changes target keyspace's config in the order specified in mutations.
 // It returns error if saving failed, operation not allowed, or if keyspace not exists.
 func (manager *Manager) UpdateKeyspaceConfig(name string, mutations []*Mutation) (*keyspacepb.KeyspaceMeta, error) {
-	// First get KeyspaceID from Name.
-	loaded, spaceID, err := manager.store.LoadKeyspaceIDByName(name)
-	if err != nil {
-		return nil, err
-	}
-	if !loaded {
-		return nil, ErrKeyspaceNotFound
-	}
-	manager.metaLock.Lock(spaceID)
-	defer manager.metaLock.Unlock(spaceID)
-	// Load keyspace by id.
-	keyspace, err := manager.loadKeyspaceByID(spaceID)
-	if err != nil {
-		return nil, err
-	}
-	// Changing ARCHIVED keyspace's config is not allowed.
-	if keyspace.State == keyspacepb.KeyspaceState_ARCHIVED {
-		return nil, errKeyspaceArchived
-	}
-	if keyspace.Config == nil {
-		keyspace.Config = map[string]string{}
-	}
-	// Update keyspace config according to mutations.
-	for _, mutation := range mutations {
-		switch mutation.Op {
-		case OpPut:
-			keyspace.Config[mutation.Key] = mutation.Value
-		case OpDel:
-			delete(keyspace.Config, mutation.Key)
-		default:
-			return nil, errIllegalOperation
+	var meta *keyspacepb.KeyspaceMeta
+	err := manager.store.RunInTxn(manager.ctx, func(txn kv.Txn) error {
+		// First get KeyspaceID from Name.
+		loaded, spaceID, err := manager.store.LoadKeyspaceID(txn, name)
+		if err != nil {
+			return err
 		}
-	}
-	// Save the updated keyspace.
-	if err = manager.store.SaveKeyspace(keyspace); err != nil {
+		if !loaded {
+			return ErrKeyspaceNotFound
+		}
+		manager.metaLock.Lock(spaceID)
+		defer manager.metaLock.Unlock(spaceID)
+		// Load keyspace by id.
+		meta, err = manager.store.LoadKeyspaceMeta(txn, spaceID)
+		if err != nil {
+			return err
+		}
+		if meta == nil {
+			return ErrKeyspaceNotFound
+		}
+		// Changing ARCHIVED keyspace's config is not allowed.
+		if meta.State == keyspacepb.KeyspaceState_ARCHIVED {
+			return errKeyspaceArchived
+		}
+		// Initialize meta's config map if it's nil.
+		if meta.Config == nil {
+			meta.Config = map[string]string{}
+		}
+		// Update keyspace config according to mutations.
+		for _, mutation := range mutations {
+			switch mutation.Op {
+			case OpPut:
+				meta.Config[mutation.Key] = mutation.Value
+			case OpDel:
+				delete(meta.Config, mutation.Key)
+			default:
+				return errIllegalOperation
+			}
+		}
+		// Save the updated keyspace meta.
+		return manager.store.SaveKeyspaceMeta(txn, meta)
+	})
+
+	if err != nil {
 		return nil, err
 	}
-	return keyspace, nil
+	return meta, nil
 }
 
 // UpdateKeyspaceState updates target keyspace to the given state if it's not already in that state.
@@ -239,41 +254,47 @@ func (manager *Manager) UpdateKeyspaceState(name string, newState keyspacepb.Key
 	if name == DefaultKeyspaceName {
 		return nil, errModifyDefault
 	}
-	// First get KeyspaceID from Name.
-	loaded, spaceID, err := manager.store.LoadKeyspaceIDByName(name)
+	var meta *keyspacepb.KeyspaceMeta
+	err := manager.store.RunInTxn(manager.ctx, func(txn kv.Txn) error {
+		// First get KeyspaceID from Name.
+		loaded, spaceID, err := manager.store.LoadKeyspaceID(txn, name)
+		if err != nil {
+			return err
+		}
+		if !loaded {
+			return ErrKeyspaceNotFound
+		}
+		manager.metaLock.Lock(spaceID)
+		defer manager.metaLock.Unlock(spaceID)
+		// Load keyspace by id.
+		meta, err = manager.store.LoadKeyspaceMeta(txn, spaceID)
+		if err != nil {
+			return err
+		}
+		if meta == nil {
+			return ErrKeyspaceNotFound
+		}
+		// If keyspace is already in target state, then nothing needs to be change.
+		if meta.State == newState {
+			return nil
+		}
+		// ARCHIVED is the terminal state that cannot be changed from.
+		if meta.State == keyspacepb.KeyspaceState_ARCHIVED {
+			return errKeyspaceArchived
+		}
+		// Archiving an enabled keyspace directly is not allowed.
+		if meta.State == keyspacepb.KeyspaceState_ENABLED && newState == keyspacepb.KeyspaceState_ARCHIVED {
+			return errArchiveEnabled
+		}
+		// Change keyspace state and record change time.
+		meta.StateChangedAt = now.Unix()
+		meta.State = newState
+		return manager.store.SaveKeyspaceMeta(txn, meta)
+	})
 	if err != nil {
 		return nil, err
 	}
-	if !loaded {
-		return nil, ErrKeyspaceNotFound
-	}
-	manager.metaLock.Lock(spaceID)
-	defer manager.metaLock.Unlock(spaceID)
-	// Load keyspace by id.
-	keyspace, err := manager.loadKeyspaceByID(spaceID)
-	if err != nil {
-		return nil, err
-	}
-	// If keyspace is already in target state, then nothing needs to be change.
-	if keyspace.State == newState {
-		return keyspace, nil
-	}
-	// ARCHIVED is the terminal state that cannot be changed from.
-	if keyspace.State == keyspacepb.KeyspaceState_ARCHIVED {
-		return nil, errKeyspaceArchived
-	}
-	// Archiving an enabled keyspace directly is not allowed.
-	if keyspace.State == keyspacepb.KeyspaceState_ENABLED && newState == keyspacepb.KeyspaceState_ARCHIVED {
-		return nil, errArchiveEnabled
-	}
-	// Change keyspace state and record change time.
-	keyspace.StateChangedAt = now.Unix()
-	keyspace.State = newState
-	// Save the updated keyspace.
-	if err = manager.store.SaveKeyspace(keyspace); err != nil {
-		return nil, err
-	}
-	return keyspace, nil
+	return meta, nil
 }
 
 // LoadRangeKeyspace load up to limit keyspaces starting from keyspace with startID.
