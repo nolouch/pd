@@ -26,9 +26,9 @@ import (
 )
 
 const (
-	// spaceIDBase is base used to encode/decode spaceID.
+	// SpaceIDBase is base used to encode/decode spaceID.
 	// It's set to 10 for better readability.
-	spaceIDBase = 10
+	SpaceIDBase = 10
 	// spaceIDBitSizeMax is the max bitSize of spaceID.
 	// It's currently set to 24 (3bytes).
 	spaceIDBitSizeMax = 24
@@ -76,7 +76,7 @@ func (se *StorageEndpoint) LoadKeyspaceMeta(txn kv.Txn, id uint32) (*keyspacepb.
 // SaveKeyspaceID saves keyspace ID to the path specified by keyspace name.
 func (se *StorageEndpoint) SaveKeyspaceID(txn kv.Txn, id uint32, name string) error {
 	idPath := KeyspaceIDPath(name)
-	idVal := strconv.FormatUint(uint64(id), spaceIDBase)
+	idVal := strconv.FormatUint(uint64(id), SpaceIDBase)
 	return txn.Save(idPath, idVal)
 }
 
@@ -90,7 +90,7 @@ func (se *StorageEndpoint) LoadKeyspaceID(txn kv.Txn, name string) (bool, uint32
 	if err != nil || idVal == "" {
 		return false, 0, err
 	}
-	id64, err := strconv.ParseUint(idVal, spaceIDBase, spaceIDBitSizeMax)
+	id64, err := strconv.ParseUint(idVal, SpaceIDBase, spaceIDBitSizeMax)
 	if err != nil {
 		return false, 0, err
 	}

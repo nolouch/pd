@@ -19,12 +19,16 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/keyspacepb"
+	"github.com/pingcap/log"
 	"github.com/tikv/pd/pkg/errs"
 	"github.com/tikv/pd/pkg/syncutil"
+	"github.com/tikv/pd/server/cluster"
 	"github.com/tikv/pd/server/id"
 	"github.com/tikv/pd/server/storage/endpoint"
 	"github.com/tikv/pd/server/storage/kv"
+	"go.uber.org/zap"
 )
 
 const (
@@ -37,19 +41,23 @@ const (
 	DefaultKeyspaceName = "DEFAULT"
 	// DefaultKeyspaceID is the id of default keyspace.
 	DefaultKeyspaceID = uint32(0)
+	// regionLabelIDPrefix is used to prefix the keyspace region label.
+	regionLabelIDPrefix = "keyspaces/"
+	// regionLabelKey is the key for keyspace id in keyspace region label.
+	regionLabelKey = "id"
 )
 
 // Manager manages keyspace related data.
 // It validates requests and provides concurrency control.
 type Manager struct {
-	// idLock guards keyspace name to id lookup entries.
-	idLock syncutil.Mutex
 	// metaLock guards keyspace meta.
 	metaLock *syncutil.LockGroup
 	// idAllocator allocates keyspace id.
 	idAllocator id.Allocator
 	// store is the storage for keyspace related information.
 	store endpoint.KeyspaceStorage
+	// rc is the raft cluster of the server.
+	rc *cluster.RaftCluster
 	// ctx is the context of the manager, to be used in transaction.
 	ctx context.Context
 }
@@ -64,14 +72,22 @@ type CreateKeyspaceRequest struct {
 }
 
 // NewKeyspaceManager creates a Manager of keyspace related data.
-func NewKeyspaceManager(store endpoint.KeyspaceStorage, idAllocator id.Allocator) (*Manager, error) {
-	manager := &Manager{
+func NewKeyspaceManager(store endpoint.KeyspaceStorage, rc *cluster.RaftCluster, idAllocator id.Allocator) *Manager {
+	return &Manager{
 		store:       store,
 		idAllocator: idAllocator,
 		metaLock:    syncutil.NewLockGroup(syncutil.WithHash(SpaceIDHash)),
+		rc:          rc,
 		ctx:         context.TODO(),
 	}
-	// Initialize default keyspace.
+}
+
+// Bootstrap saves default keyspace info.
+func (manager *Manager) Bootstrap() error {
+	// Split Keyspace Region for default keyspace.
+	if err := manager.splitKeyspaceRegion(DefaultKeyspaceID); err != nil {
+		return err
+	}
 	now := time.Now()
 	defaultKeyspace := &keyspacepb.KeyspaceMeta{
 		Id:             DefaultKeyspaceID,
@@ -82,9 +98,9 @@ func NewKeyspaceManager(store endpoint.KeyspaceStorage, idAllocator id.Allocator
 	}
 	err := manager.saveNewKeyspace(defaultKeyspace)
 	if err != nil && err != ErrKeyspaceExists && !errors.ErrorEqual(errs.ErrEtcdTxnConflict, err) {
-		return nil, err
+		return err
 	}
-	return manager, nil
+	return nil
 }
 
 // CreateKeyspace create a keyspace meta with given config and save it to storage.
@@ -95,6 +111,12 @@ func (manager *Manager) CreateKeyspace(request *CreateKeyspaceRequest) (*keyspac
 	}
 	// Allocate new keyspaceID.
 	newID, err := manager.allocID()
+	if err != nil {
+		return nil, err
+	}
+	// Split keyspace region.
+	// Use the split key of next keyspace's id.
+	err = manager.splitKeyspaceRegion(newID)
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +137,6 @@ func (manager *Manager) CreateKeyspace(request *CreateKeyspaceRequest) (*keyspac
 }
 
 func (manager *Manager) saveNewKeyspace(keyspace *keyspacepb.KeyspaceMeta) error {
-	manager.idLock.Lock()
-	defer manager.idLock.Unlock()
 	manager.metaLock.Lock(keyspace.Id)
 	defer manager.metaLock.Unlock(keyspace.Id)
 
@@ -145,6 +165,22 @@ func (manager *Manager) saveNewKeyspace(keyspace *keyspacepb.KeyspaceMeta) error
 		}
 		return manager.store.SaveKeyspaceMeta(txn, keyspace)
 	})
+}
+
+// splitKeyspaceRegion add keyspace's boundaries to region label. The corresponding
+// region will then be split by Coordinator's patrolRegion.
+func (manager *Manager) splitKeyspaceRegion(id uint32) error {
+	failpoint.Inject("skipSplitRegion", func() {
+		failpoint.Return(nil)
+	})
+
+	keyspaceRule := makeLabelRule(id)
+	log.Info("start split region for keyspace", zap.Uint32("spaceID", id), zap.Any("LabelRule", keyspaceRule))
+	err := manager.rc.GetRegionLabeler().SetLabelRule(keyspaceRule)
+	if err != nil {
+		log.Warn("failed to add label rule for keyspace", zap.Error(err))
+	}
+	return nil
 }
 
 // LoadKeyspace returns the keyspace specified by name.

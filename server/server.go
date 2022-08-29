@@ -419,6 +419,7 @@ func (s *Server) startServer(ctx context.Context) error {
 	s.storage = storage.NewCoreStorage(defaultStorage, regionStorage)
 	s.gcSafePointManager = gc.NewSafePointManager(s.storage)
 	s.basicCluster = core.NewBasicCluster()
+	s.cluster = cluster.NewRaftCluster(ctx, s.clusterID, syncer.NewRegionSyncer(s), s.client, s.httpClient)
 	keyspaceIDAllocator := id.NewAllocator(&id.AllocatorParams{
 		Client:    s.client,
 		RootPath:  s.rootPath,
@@ -427,11 +428,7 @@ func (s *Server) startServer(ctx context.Context) error {
 		Member:    s.member.MemberValue(),
 		Step:      keyspace.AllocStep,
 	})
-	s.keyspaceManager, err = keyspace.NewKeyspaceManager(s.storage, keyspaceIDAllocator)
-	if err != nil {
-		return err
-	}
-	s.cluster = cluster.NewRaftCluster(ctx, s.clusterID, syncer.NewRegionSyncer(s), s.client, s.httpClient)
+	s.keyspaceManager = keyspace.NewKeyspaceManager(s.storage, s.cluster, keyspaceIDAllocator)
 	s.hbStreams = hbstream.NewHeartbeatStreams(ctx, s.clusterID, s.cluster)
 	// initial hot_region_storage in here.
 	s.hotRegionStorage, err = storage.NewHotRegionsStorage(
@@ -694,6 +691,12 @@ func (s *Server) bootstrapCluster(req *pdpb.BootstrapRequest) (*pdpb.BootstrapRe
 	if err := s.cluster.Start(s); err != nil {
 		return nil, err
 	}
+
+	if err := s.GetKeyspaceManager().Bootstrap(); err != nil {
+		log.Warn("bootstrap keyspace manager failed")
+		return nil, err
+	}
+	log.Info("bootstrap keyspace manager succeeded")
 
 	return &pdpb.BootstrapResponse{
 		ReplicationStatus: s.cluster.GetReplicationMode().GetReplicationStatus(),
