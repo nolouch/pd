@@ -6,7 +6,23 @@ RUN apk add --no-cache \
     bash \
     curl \
     gcc \
-    g++
+    g++ \
+    openssh
+
+# Setup ssh key for private deps
+ARG ssh_key
+RUN if [ -n "$ssh_key" ]; then \
+        mkdir -p ~/.ssh && \
+        echo "$ssh_key" > ~/.ssh/key && \
+        chmod 600 ~/.ssh/key && \
+        echo "Host github.com" >> ~/.ssh/config && \
+        echo "\tUser git" >> ~/.ssh/config && \
+        echo "\tPort 443" >> ~/.ssh/config && \
+        echo "\tHostName ssh.github.com" >> ~/.ssh/config && \
+        echo "\tIdentityFile ~/.ssh/key" >> ~/.ssh/config && \
+        ssh-keyscan -p 443 ssh.github.com>> ~/.ssh/known_hosts && \
+        git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"; \
+    fi
 
 # Install jq for pd-ctl
 RUN cd / && \
