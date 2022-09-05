@@ -40,6 +40,7 @@ import (
 	"github.com/tikv/pd/server/core"
 	"github.com/tikv/pd/server/id"
 	"github.com/tikv/pd/server/join"
+	"github.com/tikv/pd/server/keyspace"
 	"github.com/tikv/pd/server/tso"
 	"go.etcd.io/etcd/clientv3"
 )
@@ -169,6 +170,13 @@ func (s *TestServer) GetAllocator() id.Allocator {
 	s.RLock()
 	defer s.RUnlock()
 	return s.server.GetAllocator()
+}
+
+// GetKeyspaceManager returns the current TestServer's Keyspace Manager.
+func (s *TestServer) GetKeyspaceManager() *keyspace.Manager {
+	s.RLock()
+	defer s.RUnlock()
+	return s.server.GetKeyspaceManager()
 }
 
 // GetAddr returns the address of TestCluster.
