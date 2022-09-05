@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tikv/pd/pkg/mock/mockid"
+	"github.com/tikv/pd/server/config"
 	"github.com/tikv/pd/server/storage/endpoint"
 	"github.com/tikv/pd/server/storage/kv"
 )
@@ -56,7 +57,7 @@ func (suite *keyspaceTestSuite) TearDownSuite() {
 func (suite *keyspaceTestSuite) SetupTest() {
 	store := endpoint.NewStorageEndpoint(kv.NewMemoryKV(), nil)
 	allocator := mockid.NewIDAllocator()
-	suite.manager = NewKeyspaceManager(store, nil, allocator)
+	suite.manager = NewKeyspaceManager(store, nil, allocator, config.KeyspaceConfig{})
 }
 
 func makeCreateKeyspaceRequests(count int) []*CreateKeyspaceRequest {

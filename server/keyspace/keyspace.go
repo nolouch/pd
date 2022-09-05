@@ -22,9 +22,9 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/keyspacepb"
 	"github.com/pingcap/log"
-	"github.com/tikv/pd/pkg/errs"
 	"github.com/tikv/pd/pkg/syncutil"
 	"github.com/tikv/pd/server/cluster"
+	"github.com/tikv/pd/server/config"
 	"github.com/tikv/pd/server/id"
 	"github.com/tikv/pd/server/storage/endpoint"
 	"github.com/tikv/pd/server/storage/kv"
@@ -60,6 +60,8 @@ type Manager struct {
 	rc *cluster.RaftCluster
 	// ctx is the context of the manager, to be used in transaction.
 	ctx context.Context
+	// config is the configurations of the manager.
+	config config.KeyspaceConfig
 }
 
 // CreateKeyspaceRequest represents necessary arguments to create a keyspace.
@@ -72,13 +74,14 @@ type CreateKeyspaceRequest struct {
 }
 
 // NewKeyspaceManager creates a Manager of keyspace related data.
-func NewKeyspaceManager(store endpoint.KeyspaceStorage, rc *cluster.RaftCluster, idAllocator id.Allocator) *Manager {
+func NewKeyspaceManager(store endpoint.KeyspaceStorage, rc *cluster.RaftCluster, idAllocator id.Allocator, config config.KeyspaceConfig) *Manager {
 	return &Manager{
 		store:       store,
 		idAllocator: idAllocator,
 		metaLock:    syncutil.NewLockGroup(syncutil.WithHash(SpaceIDHash)),
 		rc:          rc,
 		ctx:         context.TODO(),
+		config:      config,
 	}
 }
 
@@ -97,8 +100,23 @@ func (manager *Manager) Bootstrap() error {
 		StateChangedAt: now.Unix(),
 	}
 	err := manager.saveNewKeyspace(defaultKeyspace)
-	if err != nil && err != ErrKeyspaceExists && !errors.ErrorEqual(errs.ErrEtcdTxnConflict, err) {
+	// It's possible that default keyspace already exists in the storage (e.g. PD restart/recover),
+	// so we ignore the keyspaceExists error.
+	if err != nil && err != ErrKeyspaceExists {
 		return err
+	}
+
+	// Initialize pre-alloc keyspace if they are not.
+	preAlloc := manager.config.PreAlloc
+	for _, keyspaceName := range preAlloc {
+		_, err = manager.CreateKeyspace(&CreateKeyspaceRequest{
+			Name: keyspaceName,
+			Now:  now,
+		})
+		// Similarly, we ignore the keyspaceExists error.
+		if err != nil && err != ErrKeyspaceExists {
+			return err
+		}
 	}
 	return nil
 }
@@ -140,6 +158,10 @@ func (manager *Manager) saveNewKeyspace(keyspace *keyspacepb.KeyspaceMeta) error
 	manager.metaLock.Lock(keyspace.Id)
 	defer manager.metaLock.Unlock(keyspace.Id)
 
+	log.Info("allocating new keyspace",
+		zap.Uint32("id", keyspace.GetId()),
+		zap.String("name", keyspace.GetName()),
+	)
 	return manager.store.RunInTxn(manager.ctx, func(txn kv.Txn) error {
 		// Save keyspace ID.
 		// Check if keyspace with that name already exists.

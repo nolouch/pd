@@ -71,7 +71,10 @@ func PrintConfigCheckMsg(cfg *config.Config) {
 func CheckPDVersion(opt *config.PersistOptions) {
 	pdVersion := versioninfo.MinSupportedVersion(versioninfo.Base)
 	if versioninfo.PDReleaseVersion != "None" {
-		pdVersion = versioninfo.MustParseVersion(versioninfo.PDReleaseVersion)
+		// Override pd version with hard coded 6.2.0
+		// TODO: Change it back to parse versionInfo after getting release version.
+		// pdVersion = versioninfo.MustParseVersion(versioninfo.PDReleaseVersion)
+		pdVersion = versioninfo.MustParseVersion("6.2.0")
 	}
 	clusterVersion := *opt.GetClusterVersion()
 	log.Info("load cluster version", zap.Stringer("cluster-version", clusterVersion))
