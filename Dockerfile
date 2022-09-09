@@ -1,13 +1,6 @@
-FROM golang:1.16-alpine as builder
+FROM golang:1.19.1-bullseye as builder
 
-RUN apk add --no-cache \
-    make \
-    git \
-    bash \
-    curl \
-    gcc \
-    g++ \
-    openssh
+RUN apt-get update && apt-get install -y make git bash curl gcc g++ unzip
 
 # Setup ssh key for private deps
 ARG ssh_key
@@ -42,13 +35,16 @@ COPY . .
 
 RUN make
 
-FROM alpine:3.5
+FROM debian:bullseye-slim
+RUN apt update && apt install -y bash curl netcat dumb-init && rm /bin/sh && ln -s /bin/bash /bin/sh && apt-get clean
 
 COPY --from=builder /go/src/github.com/tikv/pd/bin/pd-server /pd-server
 COPY --from=builder /go/src/github.com/tikv/pd/bin/pd-ctl /pd-ctl
 COPY --from=builder /go/src/github.com/tikv/pd/bin/pd-recover /pd-recover
 COPY --from=builder /jq /usr/local/bin/jq
 
+WORKDIR /
+
 EXPOSE 2379 2380
 
-ENTRYPOINT ["/pd-server"]
+ENTRYPOINT ["/usr/bin/dumb-init", "/pd-server"]
