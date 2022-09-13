@@ -1,6 +1,6 @@
-FROM golang:1.19.1-bullseye as builder
+FROM golang:1.18.5-bullseye as builder
 
-RUN apt-get update && apt-get install -y make git bash curl gcc g++ unzip
+RUN apt update && apt install -y make git curl gcc g++ unzip
 
 # Setup ssh key for private deps
 ARG ssh_key
@@ -17,11 +17,6 @@ RUN if [ -n "$ssh_key" ]; then \
         git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"; \
     fi
 
-# Install jq for pd-ctl
-RUN cd / && \
-    wget https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 -O jq && \
-    chmod +x jq
-
 RUN mkdir -p /go/src/github.com/tikv/pd
 WORKDIR /go/src/github.com/tikv/pd
 
@@ -35,16 +30,14 @@ COPY . .
 
 RUN make
 
-FROM debian:bullseye-slim
-RUN apt update && apt install -y bash curl netcat dumb-init && rm /bin/sh && ln -s /bin/bash /bin/sh && apt-get clean
+FROM debian:bullseye-20220711-slim
+RUN apt update && apt install -y jq bash curl dnsutils wget && rm /bin/sh && ln -s /bin/bash /bin/sh && \
+    apt-get clean autoclean && apt-get autoremove --yes
 
 COPY --from=builder /go/src/github.com/tikv/pd/bin/pd-server /pd-server
 COPY --from=builder /go/src/github.com/tikv/pd/bin/pd-ctl /pd-ctl
 COPY --from=builder /go/src/github.com/tikv/pd/bin/pd-recover /pd-recover
-COPY --from=builder /jq /usr/local/bin/jq
-
-WORKDIR /
 
 EXPOSE 2379 2380
 
-ENTRYPOINT ["/usr/bin/dumb-init", "/pd-server"]
+ENTRYPOINT ["/pd-server"]
