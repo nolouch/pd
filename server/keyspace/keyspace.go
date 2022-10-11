@@ -16,6 +16,7 @@ package keyspace
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -205,7 +206,7 @@ func (manager *Manager) splitKeyspaceRegion(id uint32) error {
 	return nil
 }
 
-// LoadKeyspace returns the keyspace specified by name.
+// LoadKeyspace returns the keyspace specified by name or id.
 // It returns error if loading or unmarshalling met error or if keyspace does not exist.
 func (manager *Manager) LoadKeyspace(name string) (*keyspacepb.KeyspaceMeta, error) {
 	var meta *keyspacepb.KeyspaceMeta
@@ -215,7 +216,12 @@ func (manager *Manager) LoadKeyspace(name string) (*keyspacepb.KeyspaceMeta, err
 			return err
 		}
 		if !loaded {
-			return ErrKeyspaceNotFound
+			// try to identify name as id
+			id, err := strconv.ParseUint(name, 10, 64)
+			if err != nil {
+				return ErrKeyspaceNotFound
+			}
+			spaceID = uint32(id)
 		}
 		meta, err = manager.store.LoadKeyspaceMeta(txn, spaceID)
 		if err != nil {
