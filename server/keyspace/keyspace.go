@@ -16,7 +16,6 @@ package keyspace
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -206,7 +205,7 @@ func (manager *Manager) splitKeyspaceRegion(id uint32) error {
 	return nil
 }
 
-// LoadKeyspace returns the keyspace specified by name or id.
+// LoadKeyspace returns the keyspace specified by name.
 // It returns error if loading or unmarshalling met error or if keyspace does not exist.
 func (manager *Manager) LoadKeyspace(name string) (*keyspacepb.KeyspaceMeta, error) {
 	var meta *keyspacepb.KeyspaceMeta
@@ -216,12 +215,7 @@ func (manager *Manager) LoadKeyspace(name string) (*keyspacepb.KeyspaceMeta, err
 			return err
 		}
 		if !loaded {
-			// try to identify name as id
-			id, err := strconv.ParseUint(name, 10, 64)
-			if err != nil {
-				return ErrKeyspaceNotFound
-			}
-			spaceID = uint32(id)
+			return ErrKeyspaceNotFound
 		}
 		meta, err = manager.store.LoadKeyspaceMeta(txn, spaceID)
 		if err != nil {
@@ -232,10 +226,24 @@ func (manager *Manager) LoadKeyspace(name string) (*keyspacepb.KeyspaceMeta, err
 		}
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return meta, nil
+	return meta, err
+}
+
+// LoadKeyspaceById returns the keyspace specified by id.
+// It returns error if loading or unmarshalling met error or if keyspace does not exist.
+func (manager *Manager) LoadKeyspaceById(spaceID uint32) (*keyspacepb.KeyspaceMeta, error) {
+	var meta *keyspacepb.KeyspaceMeta
+	err := manager.store.RunInTxn(manager.ctx, func(txn kv.Txn) error {
+		meta, err := manager.store.LoadKeyspaceMeta(txn, spaceID)
+		if err != nil {
+			return err
+		}
+		if meta == nil {
+			return ErrKeyspaceNotFound
+		}
+		return nil
+	})
+	return meta, err
 }
 
 // Mutation represents a single operation to be applied on keyspace config.
