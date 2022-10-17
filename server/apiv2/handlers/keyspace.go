@@ -328,8 +328,7 @@ type KeyspaceMeta struct {
 }
 
 // MarshalJSON creates custom marshal of KeyspaceMeta with the following:
-// 1. Keyspace ID are removed from marshal result to avoid exposure of internal mechanics.
-// 2. Keyspace State are marshaled to their corresponding name for better readability.
+// 1. Keyspace State are marshaled to their corresponding name for better readability.
 func (meta *KeyspaceMeta) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		ID             uint32            `json:"id,omitempty"`
