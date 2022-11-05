@@ -114,20 +114,22 @@ func (s *HeartbeatStreams) run() {
 				continue
 			}
 			storeAddress := store.GetAddress()
+			action := "ok"
 			if stream, ok := s.streams[storeID]; ok {
 				if err := stream.Send(msg); err != nil {
 					log.Error("send heartbeat message fail",
 						zap.Uint64("region-id", msg.RegionId), errs.ZapError(errs.ErrGRPCSend.Wrap(err).GenWithStackByArgs()))
 					delete(s.streams, storeID)
-					heartbeatStreamCounter.WithLabelValues(storeAddress, storeLabel, "push", "err").Inc()
-				} else {
-					heartbeatStreamCounter.WithLabelValues(storeAddress, storeLabel, "push", "ok").Inc()
+					action = "err"
 				}
 			} else {
 				log.Debug("heartbeat stream not found, skip send message",
 					zap.Uint64("region-id", msg.RegionId),
 					zap.Uint64("store-id", storeID))
-				heartbeatStreamCounter.WithLabelValues(storeAddress, storeLabel, "push", "skip").Inc()
+				action = "skip"
+			}
+			if !core.IsTiFlash(store.GetMeta()) {
+				heartbeatStreamCounter.WithLabelValues(storeAddress, storeLabel, "push", action).Inc()
 			}
 		case <-keepAliveTicker.C:
 			for storeID, stream := range s.streams {

@@ -312,7 +312,7 @@ func syncConfig(manager *config.StoreConfigManager, stores []*core.StoreInfo) bo
 	for index := 0; index < len(stores); index++ {
 		// filter out the stores that are tiflash
 		store := stores[index]
-		if core.IsStoreContainLabel(store.GetMeta(), core.EngineKey, core.EngineTiFlash) {
+		if core.IsTiFlash(store.GetMeta()) {
 			continue
 		}
 
@@ -1454,6 +1454,8 @@ func (c *RaftCluster) checkStores() {
 			continue
 		}
 
+		isTiFlash := core.IsTiFlash(store.GetMeta())
+
 		storeID := store.GetID()
 		if store.IsPreparing() {
 			if store.GetUptime() >= c.opt.GetMaxStorePreparingTime() || c.GetRegionCount() < core.InitClusterRegionThreshold {
@@ -1476,7 +1478,8 @@ func (c *RaftCluster) checkStores() {
 					remaining := threshold - regionSize
 					// If we add multiple stores, the total will need to be changed.
 					c.progressManager.UpdateProgressTotal(encodePreparingProgressKey(storeID), threshold)
-					c.updateProgress(storeID, store.GetAddress(), preparingAction, regionSize, remaining, true /* inc */)
+					c.updateProgress(storeID, store.GetAddress(), preparingAction, regionSize, remaining,
+						true /* inc */, isTiFlash /* skipMetrics */)
 				}
 			}
 		}
@@ -1492,7 +1495,8 @@ func (c *RaftCluster) checkStores() {
 		id := offlineStore.GetId()
 		regionSize := c.core.GetStoreRegionSize(id)
 		if c.IsPrepared() {
-			c.updateProgress(id, store.GetAddress(), removingAction, float64(regionSize), float64(regionSize), false /* dec */)
+			c.updateProgress(id, store.GetAddress(), removingAction, float64(regionSize), float64(regionSize),
+				false /* dec */, isTiFlash /* skipMetrics */)
 		}
 		regionCount := c.core.GetStoreRegionCount(id)
 		// If the store is empty, it can be buried.
@@ -1675,7 +1679,7 @@ func updateTopology(topology map[string]interface{}, sortedLabels []*metapb.Stor
 	return labelCount
 }
 
-func (c *RaftCluster) updateProgress(storeID uint64, storeAddress, action string, current, remaining float64, isInc bool) {
+func (c *RaftCluster) updateProgress(storeID uint64, storeAddress, action string, current, remaining float64, isInc, skipMetrics bool) {
 	storeLabel := strconv.FormatUint(storeID, 10)
 	var progress string
 	switch action {
@@ -1694,9 +1698,11 @@ func (c *RaftCluster) updateProgress(storeID uint64, storeAddress, action string
 		log.Error("get progress status failed", zap.String("progress", progress), zap.Float64("remaining", remaining), errs.ZapError(err))
 		return
 	}
-	storesProgressGauge.WithLabelValues(storeAddress, storeLabel, action).Set(process)
-	storesSpeedGauge.WithLabelValues(storeAddress, storeLabel, action).Set(cs)
-	storesETAGauge.WithLabelValues(storeAddress, storeLabel, action).Set(ls)
+	if !skipMetrics {
+		storesProgressGauge.WithLabelValues(storeAddress, storeLabel, action).Set(process)
+		storesSpeedGauge.WithLabelValues(storeAddress, storeLabel, action).Set(cs)
+		storesETAGauge.WithLabelValues(storeAddress, storeLabel, action).Set(ls)
+	}
 }
 
 func (c *RaftCluster) resetProgress(storeID uint64, storeAddress string) {
@@ -2066,7 +2072,7 @@ func (c *RaftCluster) AddStoreLimit(store *metapb.Store) {
 		AddPeer:    config.DefaultStoreLimit.GetDefaultStoreLimit(storelimit.AddPeer),
 		RemovePeer: config.DefaultStoreLimit.GetDefaultStoreLimit(storelimit.RemovePeer),
 	}
-	if core.IsStoreContainLabel(store, core.EngineKey, core.EngineTiFlash) {
+	if core.IsTiFlash(store) {
 		sc = config.StoreLimitConfig{
 			AddPeer:    config.DefaultTiFlashStoreLimit.GetDefaultStoreLimit(storelimit.AddPeer),
 			RemovePeer: config.DefaultTiFlashStoreLimit.GetDefaultStoreLimit(storelimit.RemovePeer),

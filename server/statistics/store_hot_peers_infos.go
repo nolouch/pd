@@ -134,6 +134,7 @@ func summaryStoresLoadByEngine(
 		if !ok || !collector.Filter(info, kind) {
 			continue
 		}
+		skipMetrics := core.IsTiFlash(store.GetMeta())
 
 		// Find all hot peers first
 		var hotPeers []*HotPeerStat
@@ -146,7 +147,7 @@ func summaryStoresLoadByEngine(
 			}
 			hotPeers = append(hotPeers, peer.Clone())
 		}
-		{
+		if !skipMetrics {
 			// Metric for debug.
 			ty := "byte-rate-" + rwTy.String() + "-" + kind.String()
 			hotPeerSummary.WithLabelValues(ty, fmt.Sprintf("%v", id)).Set(peerLoadSum[ByteDim])

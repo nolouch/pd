@@ -492,6 +492,10 @@ func (oc *OperatorController) addOperatorLocked(op *operator.Operator) bool {
 				continue
 			}
 			storeLimit.Take(stepCost)
+			if core.IsTiFlash(store.GetMeta()) {
+				// do not update metrics for tiflash
+				continue
+			}
 			storeLimitCostCounter.WithLabelValues(strconv.FormatUint(storeID, 10), n).Add(float64(stepCost) / float64(storelimit.RegionInfluence[v]))
 		}
 	}
