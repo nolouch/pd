@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -636,8 +637,9 @@ func (s *GrpcServer) StoreHeartbeat(ctx context.Context, request *pdpb.StoreHear
 		}
 
 		s.handleDamagedStore(request.GetStats())
-
-		storeHeartbeatHandleDuration.WithLabelValues(storeAddress, storeLabel).Observe(time.Since(start).Seconds())
+		if !core.IsTiFlash(store.GetMeta()) {
+			storeHeartbeatHandleDuration.WithLabelValues(storeAddress, storeLabel).Observe(time.Since(start).Seconds())
+		}
 	}
 
 	if status := request.GetDrAutosyncStatus(); status != nil {
@@ -743,6 +745,8 @@ func (s *GrpcServer) ReportBuckets(stream pdpb.PD_ReportBucketsServer) error {
 			cancel()
 		}
 	}()
+	var lastStoreID uint64 = math.MaxUint64
+	skipMetrics := false
 	for {
 		request, err := server.Recv()
 		failpoint.Inject("grpcClientClosed", func() {
@@ -809,10 +813,19 @@ func (s *GrpcServer) ReportBuckets(stream pdpb.PD_ReportBucketsServer) error {
 		}
 		storeLabel := strconv.FormatUint(store.GetID(), 10)
 		storeAddress := store.GetAddress()
-		bucketReportCounter.WithLabelValues(storeAddress, storeLabel, "report", "recv").Inc()
+		if lastStoreID != store.GetID() {
+			lastStoreID = store.GetID()
+			skipMetrics = core.IsTiFlash(store.GetMeta())
+		}
+		if !skipMetrics {
+			bucketReportCounter.WithLabelValues(storeAddress, storeLabel, "report", "recv").Inc()
+		}
 
 		start := time.Now()
 		err = rc.HandleReportBuckets(buckets)
+		if skipMetrics {
+			continue
+		}
 		if err != nil {
 			bucketReportCounter.WithLabelValues(storeAddress, storeLabel, "report", "err").Inc()
 			continue
@@ -841,6 +854,8 @@ func (s *GrpcServer) RegionHeartbeat(stream pdpb.PD_RegionHeartbeatServer) error
 		}
 	}()
 
+	var lastStoreID uint64 = math.MaxUint64
+	skipMetrics := false
 	for {
 		request, err := server.Recv()
 		if err == io.EOF {
@@ -895,18 +910,27 @@ func (s *GrpcServer) RegionHeartbeat(stream pdpb.PD_RegionHeartbeatServer) error
 		}
 
 		storeID := request.GetLeader().GetStoreId()
+
 		storeLabel := strconv.FormatUint(storeID, 10)
 		store := rc.GetStore(storeID)
 		if store == nil {
 			return errors.Errorf("invalid store ID %d, not found", storeID)
 		}
+		if lastStoreID != storeID {
+			skipMetrics = core.IsTiFlash(store.GetMeta())
+			lastStoreID = storeID
+		}
 		storeAddress := store.GetAddress()
 
-		regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "recv").Inc()
-		regionHeartbeatLatency.WithLabelValues(storeAddress, storeLabel).Observe(float64(time.Now().Unix()) - float64(request.GetInterval().GetEndTimestamp()))
+		if !skipMetrics {
+			regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "recv").Inc()
+			regionHeartbeatLatency.WithLabelValues(storeAddress, storeLabel).Observe(float64(time.Now().Unix()) - float64(request.GetInterval().GetEndTimestamp()))
+		}
 
 		if time.Since(lastBind) > s.cfg.HeartbeatStreamBindInterval.Duration {
-			regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "bind").Inc()
+			if !skipMetrics {
+				regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "bind").Inc()
+			}
 			s.hbStreams.BindStream(storeID, server)
 			// refresh FlowRoundByDigit
 			flowRoundOption = core.WithFlowRoundByDigit(s.persistOptions.GetPDServerConfig().FlowRoundByDigit)
@@ -916,13 +940,17 @@ func (s *GrpcServer) RegionHeartbeat(stream pdpb.PD_RegionHeartbeatServer) error
 		region := core.RegionFromHeartbeat(request, flowRoundOption, core.SetFromHeartbeat(true))
 		if region.GetLeader() == nil {
 			log.Error("invalid request, the leader is nil", zap.Reflect("request", request), errs.ZapError(errs.ErrLeaderNil))
-			regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "invalid-leader").Inc()
+			if !skipMetrics {
+				regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "invalid-leader").Inc()
+			}
 			msg := fmt.Sprintf("invalid request leader, %v", request)
 			s.hbStreams.SendErr(pdpb.ErrorType_UNKNOWN, msg, request.GetLeader())
 			continue
 		}
 		if region.GetID() == 0 {
-			regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "invalid-region").Inc()
+			if !skipMetrics {
+				regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "invalid-region").Inc()
+			}
 			msg := fmt.Sprintf("invalid request region, %v", request)
 			s.hbStreams.SendErr(pdpb.ErrorType_UNKNOWN, msg, request.GetLeader())
 			continue
@@ -932,7 +960,9 @@ func (s *GrpcServer) RegionHeartbeat(stream pdpb.PD_RegionHeartbeatServer) error
 		if len(region.GetPeers()) == 0 {
 			log.Warn("invalid region, zero region peer count",
 				logutil.ZapRedactStringer("region-meta", core.RegionToHexMeta(region.GetMeta())))
-			regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "no-peer").Inc()
+			if !skipMetrics {
+				regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "no-peer").Inc()
+			}
 			msg := fmt.Sprintf("invalid region, zero region peer count: %v", logutil.RedactStringer(core.RegionToHexMeta(region.GetMeta())))
 			s.hbStreams.SendErr(pdpb.ErrorType_UNKNOWN, msg, request.GetLeader())
 			continue
@@ -941,13 +971,17 @@ func (s *GrpcServer) RegionHeartbeat(stream pdpb.PD_RegionHeartbeatServer) error
 
 		err = rc.HandleRegionHeartbeat(region)
 		if err != nil {
-			regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "err").Inc()
+			if !skipMetrics {
+				regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "err").Inc()
+			}
 			msg := err.Error()
 			s.hbStreams.SendErr(pdpb.ErrorType_UNKNOWN, msg, request.GetLeader())
 			continue
 		}
-		regionHeartbeatHandleDuration.WithLabelValues(storeAddress, storeLabel).Observe(time.Since(start).Seconds())
-		regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "ok").Inc()
+		if !skipMetrics {
+			regionHeartbeatHandleDuration.WithLabelValues(storeAddress, storeLabel).Observe(time.Since(start).Seconds())
+			regionHeartbeatCounter.WithLabelValues(storeAddress, storeLabel, "report", "ok").Inc()
+		}
 	}
 }
 

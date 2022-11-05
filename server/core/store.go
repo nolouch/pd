@@ -758,3 +758,8 @@ func IsAvailableForMinResolvedTS(s *StoreInfo) bool {
 	// And we will skip tiflash, because it does not report min resolved ts.
 	return !s.IsRemoved() && !s.IsTiFlash() && s.GetLeaderCount() != 0
 }
+
+// IsTiFlash returns if the store is a TiFlash store.
+func IsTiFlash(store *metapb.Store) bool {
+	return IsStoreContainLabel(store, EngineKey, EngineTiFlash)
+}
