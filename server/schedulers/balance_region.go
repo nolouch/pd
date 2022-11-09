@@ -94,6 +94,12 @@ func newBalanceRegionScheduler(opController *schedule.OperatorController, conf *
 		setOption(scheduler)
 	}
 	scheduler.filters = []filter.Filter{
+		// Note: This is serverless specific workaround.
+		// Serverless clusters have too many tiflash nodes, and each tenant only have 1 tiflash node so
+		// they cannot be balanced. Here we add an engine filter to skip all tiflash nodes.
+		// It should be removed after tiflash supports multi-tenant.
+		filter.NewEngineFilter(scheduler.GetName(), filter.NotSpecialEngines),
+
 		&filter.StoreStateFilter{ActionScope: scheduler.GetName(), MoveRegion: true},
 		filter.NewSpecialUseFilter(scheduler.GetName()),
 	}
