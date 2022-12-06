@@ -3,6 +3,8 @@ name: CD
 on:
   push:
     branches: ['release-6.2-keyspace']
+  pull_request:
+    branches: ['release-6.2-keyspace']
 
 jobs:
   build:
