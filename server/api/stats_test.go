@@ -73,7 +73,7 @@ func (suite *statsTestSuite) TestRegionStats() {
 		},
 			&metapb.Peer{Id: 101, StoreId: 1},
 			core.SetApproximateSize(100),
-			core.SetApproximateSize(80),
+			core.SetApproximateKvSize(80),
 			core.SetApproximateKeys(50),
 		),
 		core.NewRegionInfo(
@@ -90,7 +90,7 @@ func (suite *statsTestSuite) TestRegionStats() {
 			},
 			&metapb.Peer{Id: 105, StoreId: 4},
 			core.SetApproximateSize(200),
-			core.SetApproximateSize(180),
+			core.SetApproximateKvSize(180),
 			core.SetApproximateKeys(150),
 		),
 		core.NewRegionInfo(
@@ -106,7 +106,7 @@ func (suite *statsTestSuite) TestRegionStats() {
 			},
 			&metapb.Peer{Id: 107, StoreId: 5},
 			core.SetApproximateSize(1),
-			core.SetApproximateSize(1),
+			core.SetApproximateKvSize(1),
 			core.SetApproximateKeys(1),
 		),
 		core.NewRegionInfo(
@@ -121,7 +121,7 @@ func (suite *statsTestSuite) TestRegionStats() {
 			},
 			&metapb.Peer{Id: 108, StoreId: 4},
 			core.SetApproximateSize(50),
-			core.SetApproximateSize(30),
+			core.SetApproximateKvSize(30),
 			core.SetApproximateKeys(20),
 		),
 	}
