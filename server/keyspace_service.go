@@ -67,6 +67,12 @@ func (s *KeyspaceServer) LoadKeyspace(_ context.Context, request *keyspacepb.Loa
 	}, nil
 }
 
+// UpdateKeyspaceState update the keyspace state.
+// Not yet used.
+func (s *KeyspaceServer) UpdateKeyspaceState(_ context.Context, _ *keyspacepb.UpdateKeyspaceStateRequest) (*keyspacepb.UpdateKeyspaceStateResponse, error) {
+	return &keyspacepb.UpdateKeyspaceStateResponse{}, nil
+}
+
 // WatchKeyspaces captures and sends keyspace metadata changes to the client via gRPC stream.
 // Note: It sends all existing keyspaces as it's first package to the client.
 func (s *KeyspaceServer) WatchKeyspaces(request *keyspacepb.WatchKeyspacesRequest, stream keyspacepb.Keyspace_WatchKeyspacesServer) error {
