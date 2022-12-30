@@ -28,12 +28,7 @@ import (
 // ResourceGroup is the definition of a resource group, for REST API.
 type ResourceGroup struct {
 	sync.RWMutex
-	Name string         `json:"name"`
-	Mode rmpb.GroupMode `json:"mode"`
-	// RU settings
-	RUSettings *RequestUnitSettings `json:"r_u_settings,omitempty"`
-	// Native resource settings
-	ResourceSettings *NativeResourceSettings `json:"resource_settings,omitempty"`
+	*rmpb.ResourceGroup
 }
 
 // RequestUnitSettings is the definition of the RU settings.
