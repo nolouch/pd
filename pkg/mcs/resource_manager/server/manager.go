@@ -55,46 +55,48 @@ func (m *Manager) Init() {
 }
 
 // AddResourceGroup puts a resource group.
-func (m *Manager) AddResourceGroup(group *ResourceGroup) error {
+func (m *Manager) AddResourceGroup(group *rmpb.ResourceGroup) error {
 	m.RLock()
 	_, ok := m.groups[group.Name]
 	m.RUnlock()
 	if ok {
 		return errors.New("this group already exists")
 	}
-	err := group.CheckAndInit()
+	newGroup := &ResourceGroup{ResourceGroup: group}
+	err := newGroup.CheckAndInit()
 	if err != nil {
 		return err
 	}
 	m.Lock()
-	if err := m.storage().SaveResourceGroup(group.Name, group); err != nil {
+	if err := newGroup.persist(m.storage()); err != nil {
 		return err
 	}
-	m.groups[group.Name] = group
+	m.groups[group.Name] = newGroup
 	m.Unlock()
 	return nil
 }
 
 // ModifyResourceGroup modifies an existing resource group.
-func (m *Manager) ModifyResourceGroup(group *rmpb.ResourceGroup) error {
-	if group == nil || group.Name == "" {
+func (m *Manager) ModifyResourceGroup(groupSettings *rmpb.ResourceGroup) error {
+	if groupSettings == nil || groupSettings.Name == "" {
 		return errors.New("invalid group name")
 	}
 	m.Lock()
 	defer m.Unlock()
-	curGroup, ok := m.groups[group.Name]
+	name := groupSettings.Name
+	curGroup, ok := m.groups[name]
 	if !ok {
 		return errors.New("not exists the group")
 	}
 	newGroup := curGroup.Copy()
-	err := newGroup.PatchSettings(group.GetSettings())
+	err := newGroup.Reconfigure(groupSettings)
 	if err != nil {
 		return err
 	}
-	if m.storage().SaveResourceGroup(group.Name, newGroup); err != nil {
+	if m.storage().SaveResourceGroup(name, newGroup); err != nil {
 		return err
 	}
-	m.groups[group.Name] = newGroup
+	m.groups[name] = newGroup
 	return nil
 }
 

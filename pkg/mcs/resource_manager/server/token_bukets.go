@@ -14,64 +14,6 @@
 
 package server
 
-import (
-	"time"
-
-	"github.com/gogo/protobuf/proto"
-	rmpb "github.com/pingcap/kvproto/pkg/resource_manager"
-)
-
 const defaultRefillRate = 10000
 
 const defaultInitialTokens = 10 * 10000
-
-// GroupTokenBucket is a token bucket for a resource group.
-type GroupTokenBucket struct {
-	*rmpb.TokenBucket `json:"token_bucket,omitempty"`
-	Consumption       *rmpb.TokenBucketsRequest `json:"consumption,omitempty"`
-	LastUpdate        *time.Time                `json:"last_update,omitempty"`
-	Initialized       bool                      `json:"initialized"`
-}
-
-// patch patches the token bucket settings.
-func (t *GroupTokenBucket) patch(settings *rmpb.TokenBucket) {
-	if settings == nil {
-		return
-	}
-	tb := proto.Clone(t.TokenBucket).(*rmpb.TokenBucket)
-	if settings.GetSettings() != nil {
-		if tb == nil {
-			tb = &rmpb.TokenBucket{}
-		}
-		tb.Settings = settings.GetSettings()
-	}
-
-	// the settings in token is delta of the last update and now.
-	tb.Tokens += settings.GetTokens()
-	t.TokenBucket = tb
-}
-
-// Update updates the token bucket.
-func (t *GroupTokenBucket) Update(now time.Time) {
-	if !t.Initialized {
-		t.Settings.Fillrate = defaultRefillRate
-		t.Tokens = defaultInitialTokens
-		t.LastUpdate = &now
-		t.Initialized = true
-		return
-	}
-
-	delta := now.Sub(*t.LastUpdate)
-	if delta > 0 {
-		t.Tokens += float64(t.Settings.Fillrate) * delta.Seconds()
-		t.LastUpdate = &now
-	}
-}
-
-// Request requests tokens from the token bucket.
-func (t *GroupTokenBucket) Request(
-	neededTokens float64, targetPeriodMs uint64,
-) *rmpb.TokenBucket {
-	// TODO: Implement the token bucket algorithm.
-	return nil
-}

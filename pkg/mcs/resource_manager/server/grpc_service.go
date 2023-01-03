@@ -79,7 +79,7 @@ func (s *Service) GetResourceGroup(ctx context.Context, req *rmpb.GetResourceGro
 		return nil, errors.New("resource group not found")
 	}
 	return &rmpb.GetResourceGroupResponse{
-		Group: rg.IntoProtoResourceGroup(),
+		Group: rg.ResourceGroup,
 	}, nil
 }
 
@@ -90,14 +90,14 @@ func (s *Service) ListResourceGroups(ctx context.Context, req *rmpb.ListResource
 		Groups: make([]*rmpb.ResourceGroup, 0, len(groups)),
 	}
 	for _, group := range groups {
-		resp.Groups = append(resp.Groups, group.IntoProtoResourceGroup())
+		resp.Groups = append(resp.Groups, group.ResourceGroup)
 	}
 	return resp, nil
 }
 
 // AddResourceGroup implements ResourceManagerServer.AddResourceGroup.
 func (s *Service) AddResourceGroup(ctx context.Context, req *rmpb.PutResourceGroupRequest) (*rmpb.PutResourceGroupResponse, error) {
-	rg := FromProtoResourceGroup(req.GetGroup())
+	rg := req.GetGroup()
 	err := s.manager.AddResourceGroup(rg)
 	if err != nil {
 		return nil, err
