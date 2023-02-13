@@ -381,7 +381,7 @@ func (c *Config) Parse(flagSet *pflag.FlagSet) error {
 			c.WarningMsgs = append(c.WarningMsgs, msg)
 		}
 		if meta.IsDefined("dashboard", "disable-telemetry") {
-			msg := fmt.Sprintf("disable-telemetry in %s is deprecated, use enable-telemetry instead", c.configFile)
+			msg := fmt.Sprintf("disable-telemetry in %s is deprecated, use enable-telemetry instead", configFile)
 			c.WarningMsgs = append(c.WarningMsgs, msg)
 		}
 	}
