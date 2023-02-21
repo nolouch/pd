@@ -124,7 +124,6 @@ func CreateServerWrapper(cmd *cobra.Command, args []string) {
 	// TODO: Create the server
 	ctx, cancel := context.WithCancel(context.Background())
 	svr := &Server{}
-
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
 		syscall.SIGHUP,
