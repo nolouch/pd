@@ -20,6 +20,7 @@ import (
 	"math"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/metapb"
@@ -655,6 +656,62 @@ func BenchmarkRandomRegion(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		regions.RandLeaderRegion(1, nil)
+	}
+}
+
+func BenchmarkRandomSetRegion(b *testing.B) {
+	regions := NewRegionsInfo()
+	var items []*RegionInfo
+	for i := 0; i < 1000000; i++ {
+		peer := &metapb.Peer{StoreId: 1, Id: uint64(i + 1)}
+		region := NewRegionInfo(&metapb.Region{
+			Id:       uint64(i + 1),
+			Peers:    []*metapb.Peer{peer},
+			StartKey: []byte(fmt.Sprintf("%20d", i)),
+			EndKey:   []byte(fmt.Sprintf("%20d", i+1)),
+		}, peer)
+		origin, overlaps, rangeChanged := regions.SetRegion(region)
+		regions.UpdateSubTree(region, origin, overlaps, rangeChanged)
+		items = append(items, region)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		item := items[i%len(items)]
+		item.approximateKeys = int64(200000)
+		item.approximateSize = int64(20)
+		origin, overlaps, rangeChanged := regions.SetRegion(item)
+		regions.UpdateSubTree(item, origin, overlaps, rangeChanged)
+	}
+}
+
+func BenchmarkRandomSetRegionWithGetRegionSizeByRange(b *testing.B) {
+	regions := NewRegionsInfo()
+	var items []*RegionInfo
+	for i := 0; i < 1000000; i++ {
+		peer := &metapb.Peer{StoreId: 1, Id: uint64(i + 1)}
+		region := NewRegionInfo(&metapb.Region{
+			Id:       uint64(i + 1),
+			Peers:    []*metapb.Peer{peer},
+			StartKey: []byte(fmt.Sprintf("%20d", i)),
+			EndKey:   []byte(fmt.Sprintf("%20d", i+1)),
+		}, peer)
+		origin, overlaps, rangeChanged := regions.SetRegion(region)
+		regions.UpdateSubTree(region, origin, overlaps, rangeChanged)
+		items = append(items, region)
+	}
+	b.ResetTimer()
+	go func() {
+		for {
+			regions.GetRegionSizeByRange([]byte(""), []byte(""), 1000)
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	for i := 0; i < b.N; i++ {
+		item := items[i%len(items)]
+		item.approximateKeys = int64(200000)
+		item.approximateSize = int64(20)
+		origin, overlaps, rangeChanged := regions.SetRegion(item)
+		regions.UpdateSubTree(item, origin, overlaps, rangeChanged)
 	}
 }
 
