@@ -17,6 +17,7 @@ package cluster
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
@@ -56,7 +57,17 @@ func (c *RaftCluster) HandleRegionHeartbeat(region *core.RegionInfo) error {
 	if c.IsServiceIndependent(mcsutils.SchedulingServiceName) {
 		return nil
 	}
+	if time.Since(tracer.GetStartTime()) > 50*time.Millisecond {
+		fields := tracer.LogFields()
+		fields = append(fields, zap.Duration("cost", time.Since(tracer.GetStartTime())))
+		log.Info("handle region heartbeat", fields...)
+	}
 	c.coordinator.GetOperatorController().Dispatch(region, operator.DispatchFromHeartBeat, c.coordinator.RecordOpStepWithTTL)
+	if time.Since(tracer.GetStartTime()) > 50*time.Millisecond {
+		fields := tracer.LogFields()
+		fields = append(fields, zap.Duration("cost", time.Since(tracer.GetStartTime())))
+		log.Info("handle region heartbeat2", fields...)
+	}
 	return nil
 }
 

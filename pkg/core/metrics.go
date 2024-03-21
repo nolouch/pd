@@ -113,6 +113,7 @@ type RegionHeartbeatProcessTracer interface {
 	OnUpdateSubTreeFinished()
 	OnCollectRegionStatsFinished()
 	OnAllStageFinished()
+	GetStartTime() time.Time
 	LogFields() []zap.Field
 }
 
@@ -135,6 +136,7 @@ func (n *noopHeartbeatProcessTracer) OnSetRegionFinished()          {}
 func (n *noopHeartbeatProcessTracer) OnUpdateSubTreeFinished()      {}
 func (n *noopHeartbeatProcessTracer) OnCollectRegionStatsFinished() {}
 func (n *noopHeartbeatProcessTracer) OnAllStageFinished()           {}
+func (n *noopHeartbeatProcessTracer) GetStartTime() time.Time       { return time.Time{} }
 func (n *noopHeartbeatProcessTracer) LogFields() []zap.Field {
 	return nil
 }
@@ -240,6 +242,10 @@ func (h *regionHeartbeatProcessTracer) OnAllStageFinished() {
 	h.OtherDuration = now.Sub(h.lastCheckTime)
 	otherDurationSum.Add(h.OtherDuration.Seconds())
 	otherCount.Inc()
+}
+
+func (h *regionHeartbeatProcessTracer) GetStartTime() time.Time {
+	return h.startTime
 }
 
 func (h *regionHeartbeatProcessTracer) LogFields() []zap.Field {

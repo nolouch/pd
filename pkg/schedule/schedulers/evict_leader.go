@@ -33,6 +33,7 @@ import (
 	"github.com/tikv/pd/pkg/utils/apiutil"
 	"github.com/tikv/pd/pkg/utils/syncutil"
 	"github.com/unrolled/render"
+	"go.uber.org/zap"
 )
 
 const (
@@ -319,6 +320,9 @@ func scheduleEvictLeaderOnce(name, typ string, cluster sche.SchedulerCluster, co
 			}
 			for _, peer := range region.GetPendingPeers() {
 				unhealthyPeerStores[peer.GetStoreId()] = struct{}{}
+			}
+			if len(unhealthyPeerStores) > 0 {
+				log.Info("Debug evict leader", zap.Reflect("unhealthyPeerStores", unhealthyPeerStores), zap.Uint64("region", region.GetID()), zap.Reflect("downPeers", region.GetDownPeers()), zap.Reflect("pendingPeers", region.GetPendingPeers()))
 			}
 			filters = append(filters, filter.NewExcludedFilter(name, nil, unhealthyPeerStores))
 		}

@@ -105,6 +105,16 @@ func (oc *Controller) GetHBStreams() *hbstream.HeartbeatStreams {
 
 // Dispatch is used to dispatch the operator of a region.
 func (oc *Controller) Dispatch(region *core.RegionInfo, source string, recordOpStepWithTTL func(regionID uint64)) {
+	start := time.Now()
+	last := start
+
+	checkSteps := func(name string) {
+		now1 := time.Now()
+		if now1.Sub(last) > 3*time.Millisecond {
+			log.Info("handle region check steps", zap.String("name", name), zap.Duration("takes", now1.Sub(last)))
+			last = now1
+		}
+	}
 	// Check existed
 	if op := oc.GetOperator(region.GetID()); op != nil {
 		failpoint.Inject("concurrentRemoveOperator", func() {
@@ -118,28 +128,39 @@ func (oc *Controller) Dispatch(region *core.RegionInfo, source string, recordOpS
 		case STARTED:
 			operatorCounter.WithLabelValues(op.Desc(), "check").Inc()
 			if source == DispatchFromHeartBeat && oc.checkStaleOperator(op, step, region) {
+				checkSteps("start-staled-err")
 				return
 			}
+			checkSteps("start-check")
 			oc.SendScheduleCommand(region, step, source)
+			checkSteps("start-send")
 		case SUCCESS:
 			if op.ContainNonWitnessStep() {
+				checkSteps("SUCCESS-ContainNonWitnessStep")
 				recordOpStepWithTTL(op.RegionID())
 			}
+			checkSteps("SUCCESS-1")
 			if oc.RemoveOperator(op) {
+				checkSteps("SUCCESS-RemoveOperator")
 				operatorCounter.WithLabelValues(op.Desc(), "promote-success").Inc()
 				oc.PromoteWaitingOperator()
 			}
+			checkSteps("SUCCESS-2")
 			if time.Since(op.GetStartTime()) < FastOperatorFinishTime {
 				log.Debug("op finish duration less than 10s", zap.Uint64("region-id", op.RegionID()))
 				oc.pushFastOperator(op)
 			}
+			checkSteps("SUCCESS-3")
 		case TIMEOUT:
 			if oc.RemoveOperator(op, Timeout) {
+				checkSteps("TIMEOUT-remove")
 				operatorCounter.WithLabelValues(op.Desc(), "promote-timeout").Inc()
 				oc.PromoteWaitingOperator()
 			}
+			checkSteps("TIMEOUT-1")
 		default:
 			if oc.removeOperatorWithoutBury(op) {
+				checkSteps("default-removeOperatorWithoutBury")
 				// CREATED, EXPIRED must not appear.
 				// CANCELED, REPLACED must remove before transition.
 				log.Error("dispatching operator with unexpected status",
@@ -151,10 +172,13 @@ func (oc *Controller) Dispatch(region *core.RegionInfo, source string, recordOpS
 				})
 				_ = op.Cancel(NotInRunningState)
 				oc.buryOperator(op)
+				checkSteps("default-buryOperator")
 				operatorCounter.WithLabelValues(op.Desc(), "promote-unexpected").Inc()
 				oc.PromoteWaitingOperator()
+				checkSteps("default-PromoteWaitingOperator")
 			}
 		}
+		checkSteps("all")
 	}
 }
 
@@ -582,7 +606,7 @@ func (oc *Controller) RemoveOperator(op *Operator, reasons ...CancelReasonType) 
 	}
 	if removed {
 		if op.Cancel(cancelReason) {
-			log.Info("operator removed",
+			go log.Info("operator removed",
 				zap.Uint64("region-id", op.RegionID()),
 				zap.Duration("takes", op.RunningTime()),
 				zap.Reflect("operator", op))
@@ -643,7 +667,7 @@ func (oc *Controller) buryOperator(op *Operator) {
 
 	switch st {
 	case SUCCESS:
-		log.Info("operator finish",
+		go log.Info("operator finish",
 			zap.Uint64("region-id", op.RegionID()),
 			zap.Duration("takes", op.RunningTime()),
 			zap.Reflect("operator", op),
@@ -654,27 +678,27 @@ func (oc *Controller) buryOperator(op *Operator) {
 			counter.Inc()
 		}
 	case REPLACED:
-		log.Info("replace old operator",
+		go log.Info("replace old operator",
 			zap.Uint64("region-id", op.RegionID()),
 			zap.Duration("takes", op.RunningTime()),
 			zap.Reflect("operator", op),
 			zap.String("additional-info", op.GetAdditionalInfo()))
 		operatorCounter.WithLabelValues(op.Desc(), "replace").Inc()
 	case EXPIRED:
-		log.Info("operator expired",
+		go log.Info("operator expired",
 			zap.Uint64("region-id", op.RegionID()),
 			zap.Duration("lives", op.ElapsedTime()),
 			zap.Reflect("operator", op))
 		operatorCounter.WithLabelValues(op.Desc(), "expire").Inc()
 	case TIMEOUT:
-		log.Info("operator timeout",
+		go log.Info("operator timeout",
 			zap.Uint64("region-id", op.RegionID()),
 			zap.Duration("takes", op.RunningTime()),
 			zap.Reflect("operator", op),
 			zap.String("additional-info", op.GetAdditionalInfo()))
 		operatorCounter.WithLabelValues(op.Desc(), "timeout").Inc()
 	case CANCELED:
-		log.Info("operator canceled",
+		go log.Info("operator canceled",
 			zap.Uint64("region-id", op.RegionID()),
 			zap.Duration("takes", op.RunningTime()),
 			zap.Reflect("operator", op),
@@ -740,7 +764,7 @@ func (oc *Controller) GetOperatorsOfKind(mask OpKind) []*Operator {
 
 // SendScheduleCommand sends a command to the region.
 func (oc *Controller) SendScheduleCommand(region *core.RegionInfo, step OpStep, source string) {
-	log.Info("send schedule command",
+	go log.Info("send schedule command",
 		zap.Uint64("region-id", region.GetID()),
 		zap.Stringer("step", step),
 		zap.String("source", source))
