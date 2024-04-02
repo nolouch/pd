@@ -353,6 +353,8 @@ func (oc *Controller) AddWaitingOperator(ops ...*Operator) int {
 
 // AddOperator adds operators to the running operators.
 func (oc *Controller) AddOperator(ops ...*Operator) bool {
+	start := time.Now()
+	last := time.Now()
 	// note: checkAddOperator uses false param for `isPromoting`.
 	// This is used to keep check logic before fixing issue #4946,
 	// but maybe user want to add operator when waiting queue is busy
@@ -364,6 +366,10 @@ func (oc *Controller) AddOperator(ops ...*Operator) bool {
 		}
 		return false
 	}
+	cur := time.Now()
+	checkExceed := cur.Sub(last)
+	last = cur
+
 	if pass, reason := oc.checkAddOperatorSafe(false, ops...); !pass {
 		for _, op := range ops {
 			_ = op.Cancel(reason)
@@ -371,13 +377,32 @@ func (oc *Controller) AddOperator(ops ...*Operator) bool {
 		}
 		return false
 	}
+	cur = time.Now()
+	checkAddOperator := cur.Sub(last)
+	last = cur
+
 	oc.Lock()
 	defer oc.Unlock()
+
+	cur = time.Now()
+	lockTime := cur.Sub(last)
+	last = cur
+
+	defer func() {
+		cur = time.Now()
+		addOperator := cur.Sub(last)
+		last = cur
+
+		if cur.Sub(start) > 5*time.Millisecond {
+			log.Info("handle region - add operator", zap.Duration("check-exceed", checkExceed), zap.Duration("check-add-operator", checkAddOperator), zap.Duration("lock", lockTime), zap.Duration("add-operator", addOperator), zap.Duration("total", cur.Sub(start)))
+		}
+	}()
 	for _, op := range ops {
 		if !oc.addOperatorLocked(op) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -797,7 +822,6 @@ func (oc *Controller) GetOperatorsOfKind(mask OpKind) []*Operator {
 // SendScheduleCommand sends a command to the region.
 func (oc *Controller) SendScheduleCommand(region *core.RegionInfo, step OpStep, source string) {
 	go func() {
-
 		log.Info("send schedule command",
 			zap.Uint64("region-id", region.GetID()),
 			zap.Stringer("step", step),
