@@ -610,13 +610,25 @@ func (oc *Controller) removeOperatorsLocked() []*Operator {
 
 // RemoveOperator removes an operator from the running operators.
 func (oc *Controller) RemoveOperator(op *Operator, reasons ...CancelReasonType) bool {
+	last := time.Now()
+	start := time.Now()
 	oc.Lock()
+	new := time.Now()
+	lockDuraion := new.Sub(last)
+	last = new
 	removed := oc.removeOperatorLocked(op)
+	new = time.Now()
+	removeDuration := new.Sub(last)
+	last = new
+
 	oc.Unlock()
 	var cancelReason CancelReasonType
 	if len(reasons) > 0 {
 		cancelReason = reasons[0]
 	}
+	new = time.Now()
+	unlockDuration := new.Sub(last)
+	last = new
 	if removed {
 		if op.Cancel(cancelReason) {
 			go log.Info("operator removed",
@@ -625,6 +637,13 @@ func (oc *Controller) RemoveOperator(op *Operator, reasons ...CancelReasonType) 
 				zap.Reflect("operator", op))
 		}
 		oc.buryOperator(op)
+	}
+	new = time.Now()
+	buryDuration := new.Sub(last)
+	last = new
+
+	if time.Since(start) > 5*time.Millisecond {
+		log.Info("handle region - remove operator", zap.Duration("lock", lockDuraion), zap.Duration("remove", removeDuration), zap.Duration("unlock", unlockDuration), zap.Duration("bury", buryDuration), zap.Duration("total", time.Since(start)))
 	}
 	return removed
 }
@@ -636,13 +655,6 @@ func (oc *Controller) removeOperatorWithoutBury(op *Operator) bool {
 }
 
 func (oc *Controller) removeOperatorLocked(op *Operator) bool {
-	start := time.Now()
-	defer func() {
-		handleDuration := time.Since(start)
-		if handleDuration > 10*time.Millisecond {
-			log.Info("handle region - remove operator takes too long", zap.Duration("takes", handleDuration))
-		}
-	}()
 	regionID := op.RegionID()
 	if cur := oc.operators[regionID]; cur == op {
 		delete(oc.operators, regionID)
