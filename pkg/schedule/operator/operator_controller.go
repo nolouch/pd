@@ -393,7 +393,7 @@ func (oc *Controller) AddOperator(ops ...*Operator) bool {
 		addOperator := cur.Sub(last)
 		last = cur
 
-		if cur.Sub(start) > 5*time.Millisecond {
+		if cur.Sub(start) > 3*time.Millisecond {
 			log.Info("handle region - add operator", zap.Duration("check-exceed", checkExceed), zap.Duration("check-add-operator", checkAddOperator), zap.Duration("lock", lockTime), zap.Duration("add-operator", addOperator), zap.Duration("total", cur.Sub(start)))
 		}
 	}()
