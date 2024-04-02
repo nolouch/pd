@@ -54,6 +54,7 @@ type TaskOpts struct {
 // The call doesn't block for the callback to finish execution.
 func (s *AsyncRunner) RunTask(ctx context.Context, opt TaskOpts, f func(context.Context)) error {
 	if opt.Limit != nil && atomic.LoadInt64(&s.numTasks) >= int64(s.maxPendingTasks) {
+		log.Error("max waiting tasks exceeded", zap.String("task-name", opt.TaskName))
 		return ErrMaxWaitingTasksExceeded
 	}
 	s.addTask(1)

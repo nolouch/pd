@@ -123,7 +123,9 @@ func (oc *Controller) Dispatch(region *core.RegionInfo, source string, recordOpS
 		// Update operator status:
 		// The operator status should be STARTED.
 		// Check will call CheckSuccess and CheckTimeout.
+		checkSteps("get-op")
 		step := op.Check(region)
+		checkSteps("check-step")
 		switch op.Status() {
 		case STARTED:
 			operatorCounter.WithLabelValues(op.Desc(), "check").Inc()
@@ -231,19 +233,22 @@ func (oc *Controller) getNextPushOperatorTime(step OpStep, now time.Time) time.T
 // and false is the end for the poll.
 func (oc *Controller) pollNeedDispatchRegion() (r *core.RegionInfo, next bool) {
 	oc.Lock()
-	defer oc.Unlock()
 	if oc.opNotifierQueue.Len() == 0 {
+		oc.Unlock()
 		return nil, false
 	}
 	item := heap.Pop(&oc.opNotifierQueue).(*operatorWithTime)
+	oc.Unlock()
 	regionID := item.op.RegionID()
+	oc.RLock()
 	op, ok := oc.operators[regionID]
+	oc.RUnlock()
 	if !ok || op == nil {
 		return nil, true
 	}
 	r = oc.cluster.GetRegion(regionID)
 	if r == nil {
-		_ = oc.removeOperatorLocked(op)
+		_ = oc.removeOperatorWithoutBury(op)
 		if op.Cancel(RegionNotFound) {
 			log.Warn("remove operator because region disappeared",
 				zap.Uint64("region-id", op.RegionID()),
@@ -258,14 +263,17 @@ func (oc *Controller) pollNeedDispatchRegion() (r *core.RegionInfo, next bool) {
 		return r, true
 	}
 	now := time.Now()
+	oc.Lock()
 	if now.Before(item.time) {
 		heap.Push(&oc.opNotifierQueue, item)
+		oc.Unlock()
 		return nil, false
 	}
 
 	// pushes with new notify time.
 	item.time = oc.getNextPushOperatorTime(step, now)
 	heap.Push(&oc.opNotifierQueue, item)
+	oc.Unlock()
 	return r, true
 }
 
@@ -345,9 +353,6 @@ func (oc *Controller) AddWaitingOperator(ops ...*Operator) int {
 
 // AddOperator adds operators to the running operators.
 func (oc *Controller) AddOperator(ops ...*Operator) bool {
-	oc.Lock()
-	defer oc.Unlock()
-
 	// note: checkAddOperator uses false param for `isPromoting`.
 	// This is used to keep check logic before fixing issue #4946,
 	// but maybe user want to add operator when waiting queue is busy
@@ -359,13 +364,15 @@ func (oc *Controller) AddOperator(ops ...*Operator) bool {
 		}
 		return false
 	}
-	if pass, reason := oc.checkAddOperator(false, ops...); !pass {
+	if pass, reason := oc.checkAddOperatorSafe(false, ops...); !pass {
 		for _, op := range ops {
 			_ = op.Cancel(reason)
 			oc.buryOperator(op)
 		}
 		return false
 	}
+	oc.Lock()
+	defer oc.Unlock()
 	for _, op := range ops {
 		if !oc.addOperatorLocked(op) {
 			return false
@@ -414,6 +421,12 @@ func (oc *Controller) PromoteWaitingOperator() {
 			break
 		}
 	}
+}
+
+func (oc *Controller) checkAddOperatorSafe(isPromoting bool, ops ...*Operator) (bool, CancelReasonType) {
+	oc.RLock()
+	defer oc.RUnlock()
+	return oc.checkAddOperator(isPromoting, ops...)
 }
 
 // checkAddOperator checks if the operator can be added.
@@ -485,7 +498,7 @@ func isHigherPriorityOperator(new, old *Operator) bool {
 
 func (oc *Controller) addOperatorLocked(op *Operator) bool {
 	regionID := op.RegionID()
-	log.Info("add operator",
+	go log.Info("add operator",
 		zap.Uint64("region-id", regionID),
 		zap.Reflect("operator", op),
 		zap.String("additional-info", op.GetAdditionalInfo()))
@@ -628,7 +641,7 @@ func (oc *Controller) removeOperatorLocked(op *Operator) bool {
 		delete(oc.operators, regionID)
 		oc.counts[op.SchedulerKind()]--
 		operatorCounter.WithLabelValues(op.Desc(), "remove").Inc()
-		oc.ack(op)
+		go oc.ack(op)
 		if op.Kind()&OpMerge != 0 {
 			oc.removeRelatedMergeOperator(op)
 		}
@@ -707,7 +720,7 @@ func (oc *Controller) buryOperator(op *Operator) {
 		operatorCounter.WithLabelValues(op.Desc(), "cancel").Inc()
 	}
 
-	oc.records.Put(op)
+	go oc.records.Put(op)
 }
 
 // GetOperatorStatus gets the operator and its status with the specify id.
@@ -764,17 +777,20 @@ func (oc *Controller) GetOperatorsOfKind(mask OpKind) []*Operator {
 
 // SendScheduleCommand sends a command to the region.
 func (oc *Controller) SendScheduleCommand(region *core.RegionInfo, step OpStep, source string) {
-	go log.Info("send schedule command",
-		zap.Uint64("region-id", region.GetID()),
-		zap.Stringer("step", step),
-		zap.String("source", source))
+	go func() {
 
-	useConfChangeV2 := versioninfo.IsFeatureSupported(oc.config.GetClusterVersion(), versioninfo.ConfChangeV2)
-	cmd := step.GetCmd(region, useConfChangeV2)
-	if cmd == nil {
-		return
-	}
-	oc.hbStreams.SendMsg(region, cmd)
+		log.Info("send schedule command",
+			zap.Uint64("region-id", region.GetID()),
+			zap.Stringer("step", step),
+			zap.String("source", source))
+
+		useConfChangeV2 := versioninfo.IsFeatureSupported(oc.config.GetClusterVersion(), versioninfo.ConfChangeV2)
+		cmd := step.GetCmd(region, useConfChangeV2)
+		if cmd == nil {
+			return
+		}
+		oc.hbStreams.SendMsg(region, cmd)
+	}()
 }
 
 func (oc *Controller) pushFastOperator(op *Operator) {
@@ -932,8 +948,8 @@ func (o *records) Put(op *Operator) {
 
 // ExceedStoreLimit returns true if the store exceeds the cost limit after adding the  Otherwise, returns false.
 func (oc *Controller) ExceedStoreLimit(ops ...*Operator) bool {
-	oc.Lock()
-	defer oc.Unlock()
+	// oc.Lock()
+	// defer oc.Unlock()
 	return oc.exceedStoreLimitLocked(ops...)
 }
 

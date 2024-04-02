@@ -510,6 +510,8 @@ func (o *Operator) Record(finishTime time.Time) *OpRecord {
 // GetAdditionalInfo returns additional info with string
 func (o *Operator) GetAdditionalInfo() string {
 	if len(o.AdditionalInfos) != 0 {
+		return fmt.Sprintf("%v", o.AdditionalInfos)
+
 		additionalInfo, err := json.Marshal(o.AdditionalInfos)
 		if err == nil {
 			return string(additionalInfo)
