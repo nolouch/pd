@@ -636,6 +636,13 @@ func (oc *Controller) removeOperatorWithoutBury(op *Operator) bool {
 }
 
 func (oc *Controller) removeOperatorLocked(op *Operator) bool {
+	start := time.Now()
+	defer func() {
+		handleDuration := time.Since(start)
+		if handleDuration > 10*time.Millisecond {
+			log.Info("handle region - remove operator takes too long", zap.Duration("takes", handleDuration))
+		}
+	}()
 	regionID := op.RegionID()
 	if cur := oc.operators[regionID]; cur == op {
 		delete(oc.operators, regionID)
