@@ -827,7 +827,7 @@ func (suite *operatorControllerTestSuite) TestInvalidStoreId() {
 		RemovePeer{FromStore: 3, PeerID: 3, IsDownStore: false},
 	}
 	op := NewTestOperator(1, &metapb.RegionEpoch{}, OpRegion, steps...)
-	re.True(oc.addOperatorLocked(op))
+	re.True(oc.addOperator(op))
 	// Although store 3 does not exist in PD, PD can also send op to TiKV.
 	re.Equal(pdpb.OperatorStatus_RUNNING, oc.GetOperatorStatus(1).Status)
 }

@@ -405,13 +405,14 @@ func (oc *Controller) PromoteWaitingOperator() {
 	var ops []*Operator
 	for {
 		// GetOperator returns one operator or two merge operators
-		oc.RLock()
+		// need write lock
+		oc.Lock()
 		ops = oc.wop.GetOperator()
 		if ops == nil {
-			oc.RUnlock()
+			oc.Unlock()
 			return
 		}
-		oc.RUnlock()
+		oc.Unlock()
 		operatorCounter.WithLabelValues(ops[0].Desc(), "get").Inc()
 		if oc.exceedStoreLimitLocked(ops...) {
 			for _, op := range ops {
