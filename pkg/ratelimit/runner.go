@@ -141,12 +141,8 @@ func (s *AsyncRunner) RunTask(ctx context.Context, opt TaskOpts, f func(context.
 	default:
 		s.pendingMu.Lock()
 		defer s.pendingMu.Unlock()
-
 		if len(s.pendingTasks) > 0 {
 			maxWait := time.Since(s.pendingTasks[0].submittedAt)
-			if maxWait > 3*time.Second {
-				//	log.Info("runner pending tasks", zap.String("name", s.name), zap.Int("num", len(s.pendingTasks)), zap.Duration("max_wait", maxWait))
-			}
 			if maxWait > s.maxPendingDuration {
 				return errors.New("max pending duration exceeded")
 			}

@@ -449,7 +449,19 @@ func (oc *Controller) PromoteWaitingOperator() {
 }
 
 func (oc *Controller) checkAddOperatorSafe(isPromoting bool, ops ...*Operator) (bool, CancelReasonType) {
+	start := time.Now()
+	last := start
 	oc.RLock()
+	cur := time.Now()
+	lockTime := cur.Sub(last)
+	last = cur
+	defer func() {
+		cur := time.Now()
+		if cur.Sub(start) > 3*time.Millisecond {
+			log.Info("handle region - check add operator lock", zap.Duration("lock", lockTime), zap.Duration("total", cur.Sub(start)))
+		}
+	}()
+
 	defer oc.RUnlock()
 	return oc.checkAddOperator(isPromoting, ops...)
 }
@@ -463,6 +475,8 @@ func (oc *Controller) checkAddOperatorSafe(isPromoting bool, ops ...*Operator) (
 // - At least one operator is expired.
 func (oc *Controller) checkAddOperator(isPromoting bool, ops ...*Operator) (bool, CancelReasonType) {
 	for _, op := range ops {
+		start := time.Now()
+		last := start
 		region := oc.cluster.GetRegion(op.RegionID())
 		if region == nil {
 			log.Debug("region not found, cancel add operator",
@@ -470,6 +484,9 @@ func (oc *Controller) checkAddOperator(isPromoting bool, ops ...*Operator) (bool
 			operatorCounter.WithLabelValues(op.Desc(), "not-found").Inc()
 			return false, RegionNotFound
 		}
+		cur := time.Now()
+		getRegion := cur.Sub(last)
+		last = cur
 		if region.GetRegionEpoch().GetVersion() != op.RegionEpoch().GetVersion() ||
 			region.GetRegionEpoch().GetConfVer() != op.RegionEpoch().GetConfVer() {
 			log.Debug("region epoch not match, cancel add operator",
@@ -479,6 +496,10 @@ func (oc *Controller) checkAddOperator(isPromoting bool, ops ...*Operator) (bool
 			operatorCounter.WithLabelValues(op.Desc(), "epoch-not-match").Inc()
 			return false, EpochNotMatch
 		}
+		cur = time.Now()
+		checkEpoch := cur.Sub(last)
+		last = cur
+
 		if old := oc.operators[op.RegionID()]; old != nil && !isHigherPriorityOperator(op, old) {
 			log.Debug("already have operator, cancel add operator",
 				zap.Uint64("region-id", op.RegionID()),
@@ -486,6 +507,9 @@ func (oc *Controller) checkAddOperator(isPromoting bool, ops ...*Operator) (bool
 			operatorCounter.WithLabelValues(op.Desc(), "already-have").Inc()
 			return false, AlreadyExist
 		}
+		cur = time.Now()
+		checkPriority := cur.Sub(last)
+		last = cur
 		if op.Status() != CREATED {
 			log.Error("trying to add operator with unexpected status",
 				zap.Uint64("region-id", op.RegionID()),
@@ -497,14 +521,24 @@ func (oc *Controller) checkAddOperator(isPromoting bool, ops ...*Operator) (bool
 			operatorCounter.WithLabelValues(op.Desc(), "unexpected-status").Inc()
 			return false, NotInCreateStatus
 		}
+		cur = time.Now()
+		checkStatus := cur.Sub(last)
+		last = cur
+
 		if !isPromoting && oc.wopStatus.ops[op.Desc()] >= oc.config.GetSchedulerMaxWaitingOperator() {
 			log.Debug("exceed max return false", zap.Uint64("waiting", oc.wopStatus.ops[op.Desc()]), zap.String("desc", op.Desc()), zap.Uint64("max", oc.config.GetSchedulerMaxWaitingOperator()))
 			operatorCounter.WithLabelValues(op.Desc(), "exceed-max-waiting").Inc()
 			return false, ExceedWaitLimit
 		}
+		cur = time.Now()
+		checkWaiting := cur.Sub(last)
+		last = cur
 
 		if op.SchedulerKind() == OpAdmin || op.IsLeaveJointStateOperator() {
 			continue
+		}
+		if time.Since(start) > 3*time.Millisecond {
+			log.Info("handle region - inner check add operator", zap.Duration("get-region", getRegion), zap.Duration("check-epoch", checkEpoch), zap.Duration("check-priority", checkPriority), zap.Duration("check-status", checkStatus), zap.Duration("check-waiting", checkWaiting), zap.Duration("total", time.Since(start)))
 		}
 	}
 	var reason CancelReasonType
