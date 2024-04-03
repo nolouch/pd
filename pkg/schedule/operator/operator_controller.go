@@ -378,9 +378,6 @@ func (oc *Controller) AddOperator(ops ...*Operator) bool {
 	checkAddOperator := cur.Sub(last)
 	last = cur
 
-	oc.Lock()
-	defer oc.Unlock()
-
 	cur = time.Now()
 	lockTime := cur.Sub(last)
 	last = cur
@@ -395,7 +392,7 @@ func (oc *Controller) AddOperator(ops ...*Operator) bool {
 		}
 	}()
 	for _, op := range ops {
-		if !oc.addOperatorLocked(op) {
+		if !oc.addOperator(op) {
 			return false
 		}
 	}
@@ -442,13 +439,11 @@ func (oc *Controller) PromoteWaitingOperator() {
 		oc.Unlock()
 		break
 	}
-	oc.Lock()
 	for _, op := range ops {
-		if !oc.addOperatorLocked(op) {
+		if !oc.addOperator(op) {
 			break
 		}
 	}
-	oc.Unlock()
 }
 
 func (oc *Controller) checkAddOperatorSafe(isPromoting bool, ops ...*Operator) (bool, CancelReasonType) {
@@ -559,7 +554,7 @@ func isHigherPriorityOperator(new, old *Operator) bool {
 	return new.GetPriorityLevel() > old.GetPriorityLevel()
 }
 
-func (oc *Controller) addOperatorLocked(op *Operator) bool {
+func (oc *Controller) addOperator(op *Operator) bool {
 	regionID := op.RegionID()
 	go log.Info("add operator",
 		zap.Uint64("region-id", regionID),
@@ -587,9 +582,12 @@ func (oc *Controller) addOperatorLocked(op *Operator) bool {
 		return false
 	}
 	oc.operators.Store(regionID, op)
-	oc.counts[op.SchedulerKind()]++
+
 	operatorCounter.WithLabelValues(op.Desc(), "start").Inc()
 	operatorSizeHist.WithLabelValues(op.Desc()).Observe(float64(op.ApproximateSize))
+	oc.Lock()
+	oc.counts[op.SchedulerKind()]++
+	oc.Unlock()
 	opInfluence := NewTotalOpInfluence([]*Operator{op}, oc.cluster)
 	for storeID := range opInfluence.StoresInfluence {
 		store := oc.cluster.GetStore(storeID)
@@ -614,8 +612,9 @@ func (oc *Controller) addOperatorLocked(op *Operator) bool {
 			oc.SendScheduleCommand(region, step, DispatchFromCreate)
 		}
 	}
-
+	oc.Lock()
 	heap.Push(&oc.opNotifierQueue, &operatorWithTime{op: op, time: oc.getNextPushOperatorTime(step, time.Now())})
+	oc.Unlock()
 	operatorCounter.WithLabelValues(op.Desc(), "create").Inc()
 	for _, counter := range op.Counters {
 		counter.Inc()
