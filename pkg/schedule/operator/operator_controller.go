@@ -294,10 +294,8 @@ func (oc *Controller) PushOperators(recordOpStepWithTTL func(regionID uint64)) {
 
 // AddWaitingOperator adds operators to waiting operators.
 func (oc *Controller) AddWaitingOperator(ops ...*Operator) int {
-	oc.Lock()
 	added := 0
 	needPromoted := 0
-
 	for i := 0; i < len(ops); i++ {
 		op := ops[i]
 		desc := op.Desc()
@@ -306,13 +304,11 @@ func (oc *Controller) AddWaitingOperator(ops ...*Operator) int {
 			if i+1 >= len(ops) {
 				// should not be here forever
 				log.Error("orphan merge operators found", zap.String("desc", desc), errs.ZapError(errs.ErrMergeOperator.FastGenByArgs("orphan operator found")))
-				oc.Unlock()
 				return added
 			}
 			if ops[i+1].Kind()&OpMerge == 0 {
 				log.Error("merge operator should be paired", zap.String("desc",
 					ops[i+1].Desc()), errs.ZapError(errs.ErrMergeOperator.FastGenByArgs("operator should be paired")))
-				oc.Unlock()
 				return added
 			}
 			isMerge = true
@@ -329,6 +325,7 @@ func (oc *Controller) AddWaitingOperator(ops ...*Operator) int {
 			}
 			continue
 		}
+		oc.Lock()
 		oc.wop.PutOperator(op)
 		if isMerge {
 			// count two merge operators as one, so wopStatus.ops[desc] should
@@ -341,9 +338,9 @@ func (oc *Controller) AddWaitingOperator(ops ...*Operator) int {
 		oc.wopStatus.ops[desc]++
 		added++
 		needPromoted++
+		oc.Unlock()
 	}
 
-	oc.Unlock()
 	operatorCounter.WithLabelValues(ops[0].Desc(), "promote-add").Add(float64(needPromoted))
 	for i := 0; i < needPromoted; i++ {
 		oc.PromoteWaitingOperator()
@@ -408,15 +405,16 @@ func (oc *Controller) AddOperator(ops ...*Operator) bool {
 
 // PromoteWaitingOperator promotes operators from waiting operators.
 func (oc *Controller) PromoteWaitingOperator() {
-	oc.Lock()
-	defer oc.Unlock()
 	var ops []*Operator
 	for {
 		// GetOperator returns one operator or two merge operators
+		oc.RLock()
 		ops = oc.wop.GetOperator()
 		if ops == nil {
+			oc.RUnlock()
 			return
 		}
+		oc.RUnlock()
 		operatorCounter.WithLabelValues(ops[0].Desc(), "get").Inc()
 		if oc.exceedStoreLimitLocked(ops...) {
 			for _, op := range ops {
@@ -434,18 +432,23 @@ func (oc *Controller) PromoteWaitingOperator() {
 				_ = op.Cancel(reason)
 				oc.buryOperator(op)
 			}
+			oc.Lock()
 			oc.wopStatus.ops[ops[0].Desc()]--
+			oc.Unlock()
 			continue
 		}
+		oc.Lock()
 		oc.wopStatus.ops[ops[0].Desc()]--
+		oc.Unlock()
 		break
 	}
-
+	oc.Lock()
 	for _, op := range ops {
 		if !oc.addOperatorLocked(op) {
 			break
 		}
 	}
+	oc.Unlock()
 }
 
 func (oc *Controller) checkAddOperatorSafe(isPromoting bool, ops ...*Operator) (bool, CancelReasonType) {
