@@ -172,7 +172,7 @@ const (
 	statsReportMinInterval = 3      // 3s
 	statsReportMaxInterval = 5 * 60 // 5min
 	// InitClusterRegionThreshold is a threshold which represent a new cluster.
-	InitClusterRegionThreshold = 100
+	InitClusterRegionThreshold = 100000000
 )
 
 // RegionHeartbeatResponse is the interface for region heartbeat response.
