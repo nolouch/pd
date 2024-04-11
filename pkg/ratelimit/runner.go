@@ -91,7 +91,7 @@ func (s *AsyncRunner) Start() {
 					}
 					go s.runTask(task.ctx, task.Task, token)
 				} else {
-
+					go s.runTask(task.ctx, task.Task, nil)
 				}
 			case <-s.stopChan:
 				return
@@ -136,6 +136,7 @@ func (s *AsyncRunner) RunTask(ctx context.Context, opt TaskOpts, f func(context.
 		Opts: opt,
 		Task: f,
 	}
+	s.processPendingTasks()
 	select {
 	case s.taskChan <- taskWrap:
 	default:
