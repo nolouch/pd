@@ -15,14 +15,19 @@
 package api
 
 import (
+	"bytes"
+	"context"
+	"fmt"
 	"net/http"
 	"net/http/pprof"
 	"reflect"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/pingcap/failpoint"
+	"github.com/rhysh/autoprof"
 	"github.com/tikv/pd/pkg/apiutil"
 	"github.com/tikv/pd/pkg/audit"
 	"github.com/tikv/pd/pkg/ratelimit"
@@ -343,6 +348,7 @@ func createRouter(prefix string, svr *server.Server) *mux.Router {
 	registerFunc(apiRouter, "/debug/pprof/goroutine", pprofHandler.PProfGoroutine)
 	registerFunc(apiRouter, "/debug/pprof/threadcreate", pprofHandler.PProfThreadcreate)
 	registerFunc(apiRouter, "/debug/pprof/zip", pprofHandler.PProfZip)
+	registerFunc(apiRouter, "/debug/pprof/autoprof", collectHandler)
 
 	// service GC safepoint API
 	serviceGCSafepointHandler := newServiceGCSafepointHandler(svr, rd)
@@ -394,4 +400,33 @@ func createRouter(prefix string, svr *server.Server) *mux.Router {
 	})
 
 	return rootRouter
+}
+
+func collectHandler(w http.ResponseWriter, r *http.Request) {
+	meta := autoprof.CurrentArchiveMeta()
+	opt := &autoprof.ArchiveOptions{
+		CPUProfileDuration:     3 * time.Second,
+		ExecutionTraceDuration: 3 * time.Second,
+	}
+
+	buf, err := collect(r.Context(), meta, opt)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", "attachment; filename=autoprof.zip")
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func collect(ctx context.Context, meta *autoprof.ArchiveMeta, opt *autoprof.ArchiveOptions) (bytes.Buffer, error) {
+	var buf bytes.Buffer
+
+	err := autoprof.NewZipCollector(&buf, meta, opt).Run(context.Background())
+	if err != nil {
+		return buf, fmt.Errorf("autoprof.NewZipCollector.Run: %w", err)
+	}
+	return buf, nil
 }

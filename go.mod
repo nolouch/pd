@@ -37,6 +37,7 @@ require (
 	github.com/pingcap/tidb-dashboard v0.0.0-20240327052925-0f035e0e22ee
 	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/common v0.26.0
+	github.com/rhysh/autoprof v0.0.0-20240708032903-aed43a1dedec
 	github.com/sasha-s/go-deadlock v0.2.0
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
