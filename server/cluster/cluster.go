@@ -1256,6 +1256,7 @@ func (c *RaftCluster) processRegionHeartbeat(ctx *core.MetaProcessContext, regio
 			ratelimit.UpdateSubTree,
 			func(context.Context) {
 				c.CheckAndPutSubTree(region)
+				regionUpdateCacheEventCounter.Inc()
 			},
 			ratelimit.WithRetained(retained),
 		)
@@ -1270,7 +1271,6 @@ func (c *RaftCluster) processRegionHeartbeat(ctx *core.MetaProcessContext, regio
 				},
 			)
 		}
-		regionUpdateCacheEventCounter.Inc()
 	}
 
 	tracer.OnSaveCacheFinished()
